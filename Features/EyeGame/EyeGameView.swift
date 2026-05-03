@@ -1,12 +1,9 @@
 import SwiftUI
-import SwiftData
 import ARKit
 
 struct EyeGameView: View {
-    @Query private var profiles: [ChildProfile]
+    @AppStorage("childFirstName") private var childFirstName: String = ""
     @State private var viewModel = EyeGameViewModel()
-
-    private var profile: ChildProfile? { profiles.first }
 
     var body: some View {
         Group {
@@ -17,9 +14,9 @@ struct EyeGameView: View {
                 case .configuration:
                     ConfigurationView(viewModel: viewModel)
                 case .playing:
-                    PlayingView(viewModel: viewModel, childName: profile?.firstName ?? "")
+                    PlayingView(viewModel: viewModel, childName: childFirstName)
                 case .finished(let score, let total):
-                    FinishedView(score: score, total: total, childName: profile?.firstName ?? "") {
+                    FinishedView(score: score, total: total, childName: childFirstName) {
                         viewModel.reset()
                     }
                 }
@@ -345,5 +342,4 @@ private struct FinishedView: View {
 
 #Preview("Config") {
     NavigationStack { EyeGameView() }
-        .modelContainer(PreviewData.container)
 }
