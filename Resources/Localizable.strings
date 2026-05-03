@@ -1,0 +1,6 @@
+/* RettGame — chaînes françaises */
+"app.name" = "RettGame";
+"settings.title" = "Réglages";
+"game.title" = "Jeu du Regard";
+"game.start" = "Lancer la partie";
+"game.unsupported" = "Appareil non compatible";
