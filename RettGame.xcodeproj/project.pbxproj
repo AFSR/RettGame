@@ -1,0 +1,472 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		3B8A8E68E11AF109B71F6234 /* RettGameApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F5FBA33B68FE45DCC8C4582 /* RettGameApp.swift */; };
+		529CC841ED16FDD0D03D16D6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2C080EDEB2C7A951B7BDF9D7 /* Assets.xcassets */; };
+		6A5D5EB9AC7818E88732DCE2 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6BB8D061CF7CDBB5CF33EC4D /* Localizable.strings */; };
+		72FE5716D3FFA03F6E58042C /* EyeGameSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C5A76AB6087AB8EF5498B58 /* EyeGameSettingsSection.swift */; };
+		81220D49DDD3F63A7711C256 /* EyeGameSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F9895A8C5942A723C400DB /* EyeGameSettings.swift */; };
+		83D46D41EFDE2F1289B8849A /* GazeCalibrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62786BA0B838B7DCE3EFB815 /* GazeCalibrator.swift */; };
+		8FE89530940E3152E200AD2A /* GazeProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68DF3BAFBF2B9ED37E0FDB42 /* GazeProcessor.swift */; };
+		953EDF9273E0DD3F39583F26 /* EyeGameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4811327C6B6345B92DE32FD7 /* EyeGameView.swift */; };
+		955DE7286B8E62D6FC4786F0 /* EyeGameViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75B603EF4AB7DBE30C5A22BB /* EyeGameViewModel.swift */; };
+		AF4E7470F652BC3AC314677F /* ARViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F39AB8279FBE149919D00D28 /* ARViewController.swift */; };
+		B39A08F6FCBAE317AE2EF49A /* GazeKalmanFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4E989EEE8212A2394ECB408 /* GazeKalmanFilter.swift */; };
+		C4075EBCDD77CE8FFACCFD80 /* GameRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E89F4D7F12C1D76F3623B55A /* GameRootView.swift */; };
+		E090F02EBAF387AB0B09C9F9 /* AFSRTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5CC5655B5486C8F51051E6E /* AFSRTheme.swift */; };
+		E55E0ABD6E02D5DFC6F2815F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 3C64368F6E2568A1E27822E4 /* LaunchScreen.storyboard */; };
+		E617D1BB6FD2463D2836DE6D /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 606CB75D38D59C55A9DD1AA5 /* Foundation.framework */; };
+		EFC10E35BDADDFEF5FE06C50 /* GameSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBB4E0A595D1A16DC8D2F4A3 /* GameSettingsView.swift */; };
+		FF73F443C49265428EF0F18D /* AFSRButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4962CFBA2F4EB94126300799 /* AFSRButton.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		028724F70E258C145E583A22 /* RettGame.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RettGame.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2C080EDEB2C7A951B7BDF9D7 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		3C64368F6E2568A1E27822E4 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		4811327C6B6345B92DE32FD7 /* EyeGameView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EyeGameView.swift; sourceTree = "<group>"; };
+		4962CFBA2F4EB94126300799 /* AFSRButton.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AFSRButton.swift; sourceTree = "<group>"; };
+		4F5FBA33B68FE45DCC8C4582 /* RettGameApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RettGameApp.swift; sourceTree = "<group>"; };
+		606CB75D38D59C55A9DD1AA5 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		62786BA0B838B7DCE3EFB815 /* GazeCalibrator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GazeCalibrator.swift; sourceTree = "<group>"; };
+		68DF3BAFBF2B9ED37E0FDB42 /* GazeProcessor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GazeProcessor.swift; sourceTree = "<group>"; };
+		6BB8D061CF7CDBB5CF33EC4D /* Localizable.strings */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; path = Localizable.strings; sourceTree = "<group>"; };
+		6C5A76AB6087AB8EF5498B58 /* EyeGameSettingsSection.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EyeGameSettingsSection.swift; sourceTree = "<group>"; };
+		75B603EF4AB7DBE30C5A22BB /* EyeGameViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EyeGameViewModel.swift; sourceTree = "<group>"; };
+		75EE57DFA053FF2ED8766472 /* RettGame.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = RettGame.entitlements; sourceTree = "<group>"; };
+		C8F9895A8C5942A723C400DB /* EyeGameSettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EyeGameSettings.swift; sourceTree = "<group>"; };
+		CBB4E0A595D1A16DC8D2F4A3 /* GameSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GameSettingsView.swift; sourceTree = "<group>"; };
+		E0435A5A487B7F3B4999FB48 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E4E989EEE8212A2394ECB408 /* GazeKalmanFilter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GazeKalmanFilter.swift; sourceTree = "<group>"; };
+		E5CC5655B5486C8F51051E6E /* AFSRTheme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AFSRTheme.swift; sourceTree = "<group>"; };
+		E89F4D7F12C1D76F3623B55A /* GameRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GameRootView.swift; sourceTree = "<group>"; };
+		F39AB8279FBE149919D00D28 /* ARViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ARViewController.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		24108EFE7F8AD8D53692B05D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E617D1BB6FD2463D2836DE6D /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		071351EEDAFEBA7AEA751C1A = {
+			isa = PBXGroup;
+			children = (
+				86475D1513FB3B3A1518081C /* Products */,
+				B4DDCAA3CBC2213FFD3400F0 /* Frameworks */,
+				B830BF8EBA4C0C5C27E7B773 /* RettGame */,
+			);
+			sourceTree = "<group>";
+		};
+		5CE3F3C675BDA9BE49737B31 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				76DD8EBAC6B4F1877E4C264A /* Components */,
+				C0C581DE43FBDC003D641F06 /* Theme */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		76DD8EBAC6B4F1877E4C264A /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				4962CFBA2F4EB94126300799 /* AFSRButton.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		86475D1513FB3B3A1518081C /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				028724F70E258C145E583A22 /* RettGame.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		8F03A8054866A62B8582F666 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				606CB75D38D59C55A9DD1AA5 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		9B9E799345D2B38884C66545 /* EyeGame */ = {
+			isa = PBXGroup;
+			children = (
+				F39AB8279FBE149919D00D28 /* ARViewController.swift */,
+				C8F9895A8C5942A723C400DB /* EyeGameSettings.swift */,
+				6C5A76AB6087AB8EF5498B58 /* EyeGameSettingsSection.swift */,
+				4811327C6B6345B92DE32FD7 /* EyeGameView.swift */,
+				75B603EF4AB7DBE30C5A22BB /* EyeGameViewModel.swift */,
+				62786BA0B838B7DCE3EFB815 /* GazeCalibrator.swift */,
+				E4E989EEE8212A2394ECB408 /* GazeKalmanFilter.swift */,
+				68DF3BAFBF2B9ED37E0FDB42 /* GazeProcessor.swift */,
+			);
+			path = EyeGame;
+			sourceTree = "<group>";
+		};
+		B4DDCAA3CBC2213FFD3400F0 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				8F03A8054866A62B8582F666 /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		B830BF8EBA4C0C5C27E7B773 /* RettGame */ = {
+			isa = PBXGroup;
+			children = (
+				CA4C4909E170299B12D2215E /* Features */,
+				E89F4D7F12C1D76F3623B55A /* GameRootView.swift */,
+				EB467AF0E1D91711C980D6C6 /* Resources */,
+				4F5FBA33B68FE45DCC8C4582 /* RettGameApp.swift */,
+				5CE3F3C675BDA9BE49737B31 /* Shared */,
+			);
+			path = RettGame;
+			sourceTree = "<group>";
+		};
+		C0C581DE43FBDC003D641F06 /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				E5CC5655B5486C8F51051E6E /* AFSRTheme.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
+		CA4C4909E170299B12D2215E /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				9B9E799345D2B38884C66545 /* EyeGame */,
+				D992969C56592202061B3923 /* Settings */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		D992969C56592202061B3923 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				CBB4E0A595D1A16DC8D2F4A3 /* GameSettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		EB467AF0E1D91711C980D6C6 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				2C080EDEB2C7A951B7BDF9D7 /* Assets.xcassets */,
+				6BB8D061CF7CDBB5CF33EC4D /* Localizable.strings */,
+				3C64368F6E2568A1E27822E4 /* LaunchScreen.storyboard */,
+				E0435A5A487B7F3B4999FB48 /* Info.plist */,
+				75EE57DFA053FF2ED8766472 /* RettGame.entitlements */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		DD182D03F067D2401076F55D /* RettGame */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 66AB01477EA9FFF2E20003C2 /* Build configuration list for PBXNativeTarget "RettGame" */;
+			buildPhases = (
+				CB2F95C5ED01B1A1844609B8 /* Sources */,
+				24108EFE7F8AD8D53692B05D /* Frameworks */,
+				479DDC6EA89FA38C1578B62D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RettGame;
+			productName = RettGame;
+			productReference = 028724F70E258C145E583A22 /* RettGame.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		6A34C12CA7A1390E39F95ED8 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					DD182D03F067D2401076F55D = {
+						DevelopmentTeam = WG7ACRM2BU;
+					};
+				};
+			};
+			buildConfigurationList = 68EC38F3319E33DD8D66B44E /* Build configuration list for PBXProject "RettGame" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = fr;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				fr,
+				Base,
+				en,
+			);
+			mainGroup = 071351EEDAFEBA7AEA751C1A;
+			productRefGroup = 86475D1513FB3B3A1518081C /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				DD182D03F067D2401076F55D /* RettGame */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		479DDC6EA89FA38C1578B62D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				529CC841ED16FDD0D03D16D6 /* Assets.xcassets in Resources */,
+				6A5D5EB9AC7818E88732DCE2 /* Localizable.strings in Resources */,
+				E55E0ABD6E02D5DFC6F2815F /* LaunchScreen.storyboard in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		CB2F95C5ED01B1A1844609B8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AF4E7470F652BC3AC314677F /* ARViewController.swift in Sources */,
+				81220D49DDD3F63A7711C256 /* EyeGameSettings.swift in Sources */,
+				72FE5716D3FFA03F6E58042C /* EyeGameSettingsSection.swift in Sources */,
+				953EDF9273E0DD3F39583F26 /* EyeGameView.swift in Sources */,
+				955DE7286B8E62D6FC4786F0 /* EyeGameViewModel.swift in Sources */,
+				83D46D41EFDE2F1289B8849A /* GazeCalibrator.swift in Sources */,
+				B39A08F6FCBAE317AE2EF49A /* GazeKalmanFilter.swift in Sources */,
+				8FE89530940E3152E200AD2A /* GazeProcessor.swift in Sources */,
+				EFC10E35BDADDFEF5FE06C50 /* GameSettingsView.swift in Sources */,
+				C4075EBCDD77CE8FFACCFD80 /* GameRootView.swift in Sources */,
+				3B8A8E68E11AF109B71F6234 /* RettGameApp.swift in Sources */,
+				FF73F443C49265428EF0F18D /* AFSRButton.swift in Sources */,
+				E090F02EBAF387AB0B09C9F9 /* AFSRTheme.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		18639FC323A11E75015B36A4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_BITCODE = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		212FAAC6D61588BFDF558CB5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_BITCODE = NO;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		9B443D1AAFD55F03EBD59E06 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = RettGame/Resources/RettGame.entitlements;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WG7ACRM2BU;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RettGame/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RettGame;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = fr.afsr.RettGame;
+				PRODUCT_NAME = RettGame;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		BD182A7A5CE671CAA5A907C8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = RettGame/Resources/RettGame.entitlements;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WG7ACRM2BU;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RettGame/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RettGame;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = fr.afsr.RettGame;
+				PRODUCT_NAME = RettGame;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		66AB01477EA9FFF2E20003C2 /* Build configuration list for PBXNativeTarget "RettGame" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9B443D1AAFD55F03EBD59E06 /* Release */,
+				BD182A7A5CE671CAA5A907C8 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		68EC38F3319E33DD8D66B44E /* Build configuration list for PBXProject "RettGame" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				18639FC323A11E75015B36A4 /* Debug */,
+				212FAAC6D61588BFDF558CB5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 6A34C12CA7A1390E39F95ED8 /* Project object */;
+}
