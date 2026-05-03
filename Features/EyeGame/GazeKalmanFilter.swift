@@ -1,38 +1,32 @@
 import Foundation
 import CoreGraphics
 import QuartzCore
+import simd
 
 /// Filtre de Kalman 2D pour lisser la position du regard.
 ///
 /// Modèle à accélération gaussienne : état `[x, y, vx, vy]`, mesure `[x, y]`.
 ///
 /// Deux paramètres règlent le comportement :
+/// - **`smoothingStrength` ∈ [0, 1]** — réglage utilisateur (0 = réactif, 1 = lisse).
+/// - **Nombre d'échantillons de calibration** — la variance de mesure baisse
+///   avec plus de points, le filtre fait davantage confiance à la mesure quand
+///   la calibration est stable.
 ///
-/// 1. **`smoothingStrength` ∈ [0, 1]** — contrôlé par l'utilisateur dans les
-///    Réglages. 0 = réactif (très peu de lissage), 1 = très lisse.
-/// 2. **Nombre d'échantillons de calibration** — le bruit de mesure R diminue
-///    quand on a plus de points, donc le filtre fait plus confiance à la mesure
-///    quand la calibration est stable.
-///
-/// Les deux effets se multiplient : à strength=0, R est déjà très faible, le
-/// filtre est quasi transparent. À strength=1, R est multiplié par ~10 et le
-/// filtre lisse fortement.
+/// Implémentation : matrices fixes (`simd_double4x4`, scalaires pour les blocs
+/// 2×2) allouées sur la pile, opérations vectorisées par le matériel — `filter()`
+/// est appelé à 60 Hz et n'alloue plus de mémoire heap après l'init.
 final class GazeKalmanFilter {
 
-    // MARK: - Tuning baseline (avant application de smoothingStrength)
+    // MARK: - Tuning baseline
 
-    /// σ de mesure avec aucune calibration (pixels).
     private let sigmaMeasureHighBase: Double = 60.0
-    /// σ de mesure quand la calibration est stable (≥ samplesForFullConfidence).
     private let sigmaMeasureLowBase: Double = 8.0
-    /// Nombre d'échantillons pour atteindre la confiance maximale.
     private let samplesForFullConfidence: Double = 10.0
-    /// σ d'accélération aléatoire (pixels/s²) — plus élevé = filtre plus réactif aux changements.
     private let sigmaAcceleration: Double = 4000.0
 
     // MARK: - Config runtime
 
-    /// 0 = aucun lissage (filtre bypassé), 1 = lissage maximal.
     var smoothingStrength: Double = 0.4 {
         didSet {
             smoothingStrength = max(0, min(1, smoothingStrength))
@@ -40,14 +34,13 @@ final class GazeKalmanFilter {
         }
     }
 
-    /// Si faux, le filtre est complètement bypassé (retourne la mesure brute).
     var enabled: Bool = true
 
     // MARK: - State
 
-    private var state: [Double] = [0, 0, 0, 0]
-    private var P: [[Double]] = GazeKalmanFilter.diag([1000, 1000, 1000, 1000])
-    private var R: [[Double]] = [[1, 0], [0, 1]]
+    private var state: SIMD4<Double> = .zero
+    private var P: simd_double4x4 = simd_double4x4(diagonal: SIMD4(1000, 1000, 1000, 1000))
+    private var measurementVariance: Double = 1
     private var lastTimestamp: CFTimeInterval?
     private var initialized = false
     private var lastSampleCount: Int = 0
@@ -59,13 +52,12 @@ final class GazeKalmanFilter {
     // MARK: - Public API
 
     func reset() {
-        state = [0, 0, 0, 0]
-        P = GazeKalmanFilter.diag([1000, 1000, 1000, 1000])
+        state = .zero
+        P = simd_double4x4(diagonal: SIMD4(1000, 1000, 1000, 1000))
         lastTimestamp = nil
         initialized = false
     }
 
-    /// Met à jour la confiance du filtre en fonction du nombre d'échantillons de calibration.
     func setCalibrationConfidence(sampleCount: Int) {
         lastSampleCount = sampleCount
         recomputeR()
@@ -73,17 +65,12 @@ final class GazeKalmanFilter {
 
     private func recomputeR() {
         let factor = min(Double(lastSampleCount) / samplesForFullConfidence, 1.0)
-        // Échelle entre High (peu de calibration) et Low (calibration stable)
         let baseSigma = sigmaMeasureHighBase - (sigmaMeasureHighBase - sigmaMeasureLowBase) * factor
-        // Amplification par smoothingStrength : σ_final = baseSigma · (1 + 3·strength).
-        // À strength=0 : σ = baseSigma. À strength=1 : σ = 4·baseSigma → variance ×16.
         let sigma = baseSigma * (1.0 + 3.0 * smoothingStrength)
-        let r = sigma * sigma
-        R = [[r, 0], [0, r]]
+        measurementVariance = sigma * sigma
     }
 
     /// Applique une étape prédiction + mise à jour et retourne la position lissée.
-    /// Si `enabled == false`, retourne directement la mesure.
     func filter(measurement: CGPoint) -> CGPoint {
         guard enabled else {
             initialized = false
@@ -99,121 +86,95 @@ final class GazeKalmanFilter {
         lastTimestamp = now
 
         if !initialized {
-            state = [Double(measurement.x), Double(measurement.y), 0, 0]
+            state = SIMD4(Double(measurement.x), Double(measurement.y), 0, 0)
             initialized = true
             return measurement
         }
 
         predict(dt: dt)
-        update(measurement: measurement)
-        return CGPoint(x: state[0], y: state[1])
+        update(measurement: SIMD2(Double(measurement.x), Double(measurement.y)))
+        return CGPoint(x: state.x, y: state.y)
     }
 
     // MARK: - Kalman steps
 
-    private func predict(dt: Double) {
-        state = [
-            state[0] + dt * state[2],
-            state[1] + dt * state[3],
-            state[2],
-            state[3]
-        ]
-        let F: [[Double]] = [
-            [1, 0, dt, 0],
-            [0, 1, 0, dt],
-            [0, 0, 1, 0],
-            [0, 0, 0, 1]
-        ]
-        let FP = Self.mul(F, P)
-        let FPFt = Self.mul(FP, Self.transpose(F))
-        let Q = processNoise(dt: dt)
-        P = Self.add(FPFt, Q)
+    /// `simd_double4x4` est column-major : on liste les 4 colonnes successives.
+    /// Matrice de transition F ([1 0 dt 0 ; 0 1 0 dt ; 0 0 1 0 ; 0 0 0 1]).
+    @inline(__always)
+    private func transitionMatrix(dt: Double) -> simd_double4x4 {
+        simd_double4x4(
+            SIMD4(1, 0, 0, 0),
+            SIMD4(0, 1, 0, 0),
+            SIMD4(dt, 0, 1, 0),
+            SIMD4(0, dt, 0, 1)
+        )
     }
 
-    private func processNoise(dt: Double) -> [[Double]] {
+    @inline(__always)
+    private func processNoise(dt: Double) -> simd_double4x4 {
         let sa2 = sigmaAcceleration * sigmaAcceleration
         let dt2 = dt * dt
         let dt3 = dt2 * dt
         let dt4 = dt3 * dt
-        return [
-            [dt4 / 4 * sa2, 0, dt3 / 2 * sa2, 0],
-            [0, dt4 / 4 * sa2, 0, dt3 / 2 * sa2],
-            [dt3 / 2 * sa2, 0, dt2 * sa2, 0],
-            [0, dt3 / 2 * sa2, 0, dt2 * sa2]
-        ]
+        let q11 = dt4 * 0.25 * sa2
+        let q13 = dt3 * 0.5 * sa2
+        let q33 = dt2 * sa2
+        return simd_double4x4(
+            SIMD4(q11, 0, q13, 0),
+            SIMD4(0, q11, 0, q13),
+            SIMD4(q13, 0, q33, 0),
+            SIMD4(0, q13, 0, q33)
+        )
     }
 
-    private func update(measurement: CGPoint) {
-        let innovation: [Double] = [
-            Double(measurement.x) - state[0],
-            Double(measurement.y) - state[1]
-        ]
-        let S: [[Double]] = [
-            [P[0][0] + R[0][0], P[0][1] + R[0][1]],
-            [P[1][0] + R[1][0], P[1][1] + R[1][1]]
-        ]
-        let det = S[0][0] * S[1][1] - S[0][1] * S[1][0]
+    private func predict(dt: Double) {
+        let F = transitionMatrix(dt: dt)
+        state = F * state
+        // P = F · P · F^T + Q
+        P = F * P * F.transpose + processNoise(dt: dt)
+    }
+
+    /// Étape de mise à jour. H = [I₂ | 0₂] (mesure x, y depuis l'état).
+    /// On exploite la structure de H pour ne jamais matérialiser de matrice 2×4.
+    private func update(measurement: SIMD2<Double>) {
+        // Innovation y = z - H·x.
+        let innovation = measurement - SIMD2(state.x, state.y)
+
+        // Accès column-major : P[col][row] = P_{row, col} (notation math).
+        let pCol0 = P[0]
+        let pCol1 = P[1]
+
+        // S = H·P·H^T + R = top-left 2×2 de P + r·I.
+        let s00 = pCol0[0] + measurementVariance       // P_{0,0} + r
+        let s11 = pCol1[1] + measurementVariance       // P_{1,1} + r
+        let s01 = pCol1[0]                              // P_{0,1}
+        let s10 = pCol0[1]                              // P_{1,0}
+
+        let det = s00 * s11 - s01 * s10
         guard abs(det) > 1e-9 else { return }
-        let Sinv: [[Double]] = [
-            [ S[1][1] / det, -S[0][1] / det],
-            [-S[1][0] / det,  S[0][0] / det]
-        ]
-        var K = [[Double]](repeating: [0, 0], count: 4)
-        for i in 0..<4 {
-            for j in 0..<2 {
-                K[i][j] = P[i][0] * Sinv[0][j] + P[i][1] * Sinv[1][j]
-            }
-        }
-        for i in 0..<4 {
-            state[i] += K[i][0] * innovation[0] + K[i][1] * innovation[1]
-        }
-        var newP = [[Double]](repeating: [Double](repeating: 0, count: 4), count: 4)
-        for i in 0..<4 {
-            for j in 0..<4 {
-                var sum = P[i][j]
-                sum -= K[i][0] * P[0][j] + K[i][1] * P[1][j]
-                newP[i][j] = sum
-            }
+        let invDet = 1.0 / det
+        // S^{-1} (2×2)
+        let si00 =  s11 * invDet
+        let si01 = -s01 * invDet
+        let si10 = -s10 * invDet
+        let si11 =  s00 * invDet
+
+        // K = P · H^T · S^{-1} (4×2). PH^T = 2 premières colonnes de P.
+        // K[:, 0] = pCol0 · si00 + pCol1 · si10
+        // K[:, 1] = pCol0 · si01 + pCol1 · si11
+        let k0 = pCol0 * si00 + pCol1 * si10
+        let k1 = pCol0 * si01 + pCol1 * si11
+
+        // x ← x + K · y
+        state = state + k0 * innovation.x + k1 * innovation.y
+
+        // P ← P − K · H · P. (K·H·P)_{:, j} = k0 · P_{0, j} + k1 · P_{1, j}
+        //                                  = k0 · P[j][0] + k1 · P[j][1]
+        var newP = P
+        for j in 0..<4 {
+            let pColJ = P[j]
+            newP[j] = pColJ - (k0 * pColJ[0] + k1 * pColJ[1])
         }
         P = newP
-    }
-
-    // MARK: - Matrix helpers
-
-    private static func diag(_ values: [Double]) -> [[Double]] {
-        var m = [[Double]](repeating: [Double](repeating: 0, count: values.count), count: values.count)
-        for i in 0..<values.count { m[i][i] = values[i] }
-        return m
-    }
-
-    private static func transpose(_ a: [[Double]]) -> [[Double]] {
-        let rows = a.count
-        let cols = a[0].count
-        var t = [[Double]](repeating: [Double](repeating: 0, count: rows), count: cols)
-        for i in 0..<rows { for j in 0..<cols { t[j][i] = a[i][j] } }
-        return t
-    }
-
-    private static func mul(_ a: [[Double]], _ b: [[Double]]) -> [[Double]] {
-        let rows = a.count
-        let inner = b.count
-        let cols = b[0].count
-        var out = [[Double]](repeating: [Double](repeating: 0, count: cols), count: rows)
-        for i in 0..<rows {
-            for j in 0..<cols {
-                var sum = 0.0
-                for k in 0..<inner { sum += a[i][k] * b[k][j] }
-                out[i][j] = sum
-            }
-        }
-        return out
-    }
-
-    private static func add(_ a: [[Double]], _ b: [[Double]]) -> [[Double]] {
-        let rows = a.count
-        let cols = a[0].count
-        var out = [[Double]](repeating: [Double](repeating: 0, count: cols), count: rows)
-        for i in 0..<rows { for j in 0..<cols { out[i][j] = a[i][j] + b[i][j] } }
-        return out
     }
 }

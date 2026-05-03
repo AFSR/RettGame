@@ -235,6 +235,7 @@ private struct PlayingView: View {
             }
             .onChange(of: geo.size) { _, newSize in
                 canvasSize = newSize
+                viewModel.updateCanvasSize(newSize)
             }
         }
     }

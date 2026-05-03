@@ -4,6 +4,17 @@ import Observation
 import AudioToolbox
 import ARKit
 import SwiftUI
+import QuartzCore
+
+/// Petit wrapper NSObject pour exposer un `@objc` selector à `CADisplayLink`,
+/// sans contraindre le ViewModel à hériter de NSObject.
+private final class DisplayLinkProxy: NSObject {
+    var onTick: ((CADisplayLink) -> Void)?
+
+    @objc func handle(_ link: CADisplayLink) {
+        onTick?(link)
+    }
+}
 
 /// État d'une bulle qui monte à l'écran. Mise à jour par tick à 30 Hz.
 struct Bubble: Identifiable, Equatable {
@@ -96,8 +107,11 @@ final class BubblesGameViewModel {
     var state: GameState = .configuration
     var bubbles: [Bubble] = []
     var score: Int = 0
-    var rawGazePoint: CGPoint = .zero
-    var calibratedGazePoint: CGPoint = .zero
+    /// Mis à jour à 60 Hz mais usage uniquement interne : pas observé pour
+    /// éviter d'invalider la vue à chaque frame.
+    @ObservationIgnored var rawGazePoint: CGPoint = .zero
+    @ObservationIgnored var calibratedGazePoint: CGPoint = .zero
+    /// Observé : la vue affiche le point bleu à cette position.
     var lastGazePoint: CGPoint = .zero
     var splashAt: CGPoint? = nil
     var timeRemaining: TimeInterval = 60
@@ -108,10 +122,13 @@ final class BubblesGameViewModel {
 
     /// Plafond pour éviter le spam visuel et les coûts de hit-test.
     private let maxConcurrentBubbles = 8
-    private var spawnTask: Task<Void, Never>?
-    private var tickTask: Task<Void, Never>?
-    private var endDate: Date?
-    private var nextColorIndex = 0
+    @ObservationIgnored private var spawnTimer: Timer?
+    @ObservationIgnored private var displayLink: CADisplayLink?
+    @ObservationIgnored private var displayLinkProxy = DisplayLinkProxy()
+    @ObservationIgnored private var endDate: Date?
+    @ObservationIgnored private var lastTickTimestamp: CFTimeInterval = 0
+    @ObservationIgnored private var nextColorIndex = 0
+    @ObservationIgnored private var canvasSize: CGSize = .zero
 
     static let minimumCalibrationSamples = EyeGameViewModel.minimumCalibrationSamples
     var hasCalibration: Bool { calibrator.samplesCount >= Self.minimumCalibrationSamples }
@@ -119,6 +136,11 @@ final class BubblesGameViewModel {
     init() {
         applyStoredFilterSettings()
         kalman.setCalibrationConfidence(sampleCount: calibrator.samplesCount)
+    }
+
+    deinit {
+        displayLink?.invalidate()
+        spawnTimer?.invalidate()
     }
 
     func applyStoredFilterSettings() {
@@ -139,9 +161,6 @@ final class BubblesGameViewModel {
         guard rawGazePoint != .zero else { return false }
         calibrator.addSample(raw: rawGazePoint, actual: actual)
         kalman.setCalibrationConfidence(sampleCount: calibrator.samplesCount)
-        let newCalibrated = calibrator.apply(rawGazePoint)
-        calibratedGazePoint = newCalibrated
-        lastGazePoint = kalman.filter(measurement: newCalibrated)
         return true
     }
 
@@ -160,6 +179,7 @@ final class BubblesGameViewModel {
     }
 
     func start(in canvasSize: CGSize) {
+        self.canvasSize = canvasSize
         score = 0
         bubbles = []
         processor.reset()
@@ -169,16 +189,20 @@ final class BubblesGameViewModel {
         timeRemaining = duration.seconds
         endDate = Date().addingTimeInterval(duration.seconds)
         state = .playing
-        startSpawning(in: canvasSize)
-        startTicking(canvasSize: canvasSize)
+        startSpawning()
+        startTicking()
     }
 
     func reset() {
-        spawnTask?.cancel()
-        tickTask?.cancel()
+        stopSpawning()
+        stopTicking()
         bubbles = []
         splashAt = nil
         state = .configuration
+    }
+
+    func updateCanvasSize(_ size: CGSize) {
+        canvasSize = size
     }
 
     /// Pipeline : raw (ARKit) → calibration → Kalman → dwell sur les bulles.
@@ -234,19 +258,24 @@ final class BubblesGameViewModel {
         }
     }
 
-    private func startSpawning(in canvasSize: CGSize) {
-        spawnTask?.cancel()
-        let spawnInterval = speed.spawnInterval
-        spawnTask = Task { [weak self] in
-            while let self, !Task.isCancelled {
-                await MainActor.run { self.spawnOneBubble(in: canvasSize) }
-                try? await Task.sleep(nanoseconds: UInt64(spawnInterval * 1_000_000_000))
-            }
+    private func startSpawning() {
+        stopSpawning()
+        let interval = speed.spawnInterval
+        // Timer ajouté en `.common` pour continuer à fournir des bulles pendant
+        // les interactions tactiles (sinon il se met en pause en UITrackingMode).
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+            self?.spawnOneBubble()
         }
+        RunLoop.main.add(timer, forMode: .common)
+        spawnTimer = timer
     }
 
-    @MainActor
-    private func spawnOneBubble(in canvasSize: CGSize) {
+    private func stopSpawning() {
+        spawnTimer?.invalidate()
+        spawnTimer = nil
+    }
+
+    private func spawnOneBubble() {
         guard state == .playing else { return }
         guard bubbles.count < maxConcurrentBubbles else { return }
         let diameter = bubbleSize.diameter
@@ -260,51 +289,69 @@ final class BubblesGameViewModel {
             colorIndex: nextColorIndex,
             verticalSpeed: vSpeed
         )
-        nextColorIndex += 1
+        nextColorIndex = (nextColorIndex + 1) % BubblesPalette.colors.count
         bubbles.append(bubble)
     }
 
-    private func startTicking(canvasSize: CGSize) {
-        tickTask?.cancel()
-        let frame = 1.0 / 30.0
-        let frameNanos = UInt64(frame * 1_000_000_000)
-        tickTask = Task { [weak self] in
-            while let self, !Task.isCancelled {
-                await MainActor.run { self.tick(deltaTime: frame, canvasSize: canvasSize) }
-                try? await Task.sleep(nanoseconds: frameNanos)
-            }
+    private func startTicking() {
+        stopTicking()
+        lastTickTimestamp = CACurrentMediaTime()
+        displayLinkProxy.onTick = { [weak self] link in
+            self?.tickFromDisplayLink(link)
         }
+        let link = CADisplayLink(
+            target: displayLinkProxy,
+            selector: #selector(DisplayLinkProxy.handle(_:))
+        )
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+        link.add(to: .main, forMode: .common)
+        displayLink = link
     }
 
-    @MainActor
-    private func tick(deltaTime: TimeInterval, canvasSize: CGSize) {
+    private func stopTicking() {
+        displayLink?.invalidate()
+        displayLink = nil
+        displayLinkProxy.onTick = nil
+    }
+
+    private func tickFromDisplayLink(_ link: CADisplayLink) {
+        let now = link.timestamp
+        let dt = max(0.001, min(0.1, now - lastTickTimestamp))
+        lastTickTimestamp = now
+        tick(deltaTime: dt)
+    }
+
+    private func tick(deltaTime: TimeInterval) {
         guard state == .playing, let endDate else { return }
 
         let remaining = endDate.timeIntervalSinceNow
         timeRemaining = max(0, remaining)
         if remaining <= 0 {
-            spawnTask?.cancel()
-            tickTask?.cancel()
+            stopSpawning()
+            stopTicking()
             state = .finished(score: score)
             bubbles = []
             return
         }
 
-        // Avance les bulles (immutables → on remplace).
+        // Avance les bulles en place — pas d'allocation par frame, et la
+        // mutation de `bubbles[i].position.y` déclenche une seule
+        // invalidation `@Observable` pour toute la frame.
         let dt = CGFloat(deltaTime)
-        bubbles = bubbles.compactMap { b in
-            let newY = b.position.y - b.verticalSpeed * dt
-            if newY + b.diameter / 2 < 0 {
-                processor.reset() // relâche un dwell éventuel sur cette bulle
-                return nil
+        var i = bubbles.count
+        while i > 0 {
+            i -= 1
+            bubbles[i].position.y -= bubbles[i].verticalSpeed * dt
+            if bubbles[i].position.y + bubbles[i].diameter / 2 < 0 {
+                let removedId = bubbles[i].id
+                bubbles.remove(at: i)
+                // Ne reset le dwell que s'il portait sur la bulle qui vient
+                // de disparaître — sinon on tuerait le dwell en cours sur
+                // une autre bulle.
+                if processor.currentTargetId == removedId {
+                    processor.reset()
+                }
             }
-            return Bubble(
-                id: b.id,
-                position: CGPoint(x: b.position.x, y: newY),
-                diameter: b.diameter,
-                colorIndex: b.colorIndex,
-                verticalSpeed: b.verticalSpeed
-            )
         }
     }
 

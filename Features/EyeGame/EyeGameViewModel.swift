@@ -23,11 +23,15 @@ final class EyeGameViewModel {
     var state: GameState = .configuration
     var currentTarget: GameTarget?
     var score: Int = 0
-    /// Dernier point brut reçu d'ARKit (avant calibration).
-    var rawGazePoint: CGPoint = .zero
-    /// Point après calibration (linéaire) mais avant Kalman.
-    var calibratedGazePoint: CGPoint = .zero
-    /// Point final, après calibration puis lissage Kalman — utilisé pour l'affichage et le dwell.
+    /// Dernier point brut reçu d'ARKit. Mis à jour à 60 Hz, lu uniquement
+    /// par le pipeline interne — `@ObservationIgnored` pour ne pas déclencher
+    /// d'invalidation SwiftUI à chaque frame.
+    @ObservationIgnored var rawGazePoint: CGPoint = .zero
+    /// Point après calibration (linéaire), avant Kalman. Idem : interne, non
+    /// observé pour éviter une invalidation à chaque frame.
+    @ObservationIgnored var calibratedGazePoint: CGPoint = .zero
+    /// Point final, après calibration puis lissage Kalman — utilisé pour
+    /// l'affichage et le dwell. Observé car la vue lit la position.
     var lastGazePoint: CGPoint = .zero
     var splashAt: CGPoint? = nil
 
@@ -130,18 +134,15 @@ final class EyeGameViewModel {
     }
 
     /// Enregistre un échantillon de calibration sans vérification de proximité.
-    /// Utilisé par la session guidée (cibles à position connue) et par le pipeline
-    /// dwell-réussi. Retourne `false` si ARKit n'a pas encore produit de regard
-    /// (rawGazePoint à zéro) — l'appelant peut signaler le tap comme à refaire.
+    /// Utilisé par les hits de dwell et les taps parents. Retourne `false` si
+    /// ARKit n'a pas encore produit de regard. Ne refait PAS tourner le Kalman :
+    /// la prochaine frame `handleGaze` (~16 ms plus tard) appliquera la nouvelle
+    /// transformation de calibration au point déjà à l'écran — délai imperceptible.
     @discardableResult
     func recordCalibrationSample(actual: CGPoint) -> Bool {
         guard rawGazePoint != .zero else { return false }
         calibrator.addSample(raw: rawGazePoint, actual: actual)
         kalman.setCalibrationConfidence(sampleCount: calibrator.samplesCount)
-
-        let newCalibrated = calibrator.apply(rawGazePoint)
-        calibratedGazePoint = newCalibrated
-        lastGazePoint = kalman.filter(measurement: newCalibrated)
         return true
     }
 
