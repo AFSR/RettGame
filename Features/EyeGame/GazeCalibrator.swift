@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import Observation
 
 /// Calibrateur du regard.
 ///
@@ -12,9 +13,13 @@ import CoreGraphics
 /// simple mais robuste : ça corrige offset, échelle et inversion d'axe en même temps.
 ///
 /// Les échantillons sont persistés dans `UserDefaults` pour survivre entre les
-/// lancements de l'app.
+/// lancements de l'app. L'instance `shared` est utilisée par tous les jeux pour
+/// que la calibration faite depuis l'un soit immédiatement visible dans les autres.
+@Observable
 final class GazeCalibrator {
-    private struct Sample: Codable { let rx: Double; let ry: Double; let ax: Double; let ay: Double }
+    static let shared = GazeCalibrator()
+
+    struct Sample: Codable, Equatable { let rx: Double; let ry: Double; let ax: Double; let ay: Double }
 
     private var samples: [Sample] = []
     private let maxSamples: Int

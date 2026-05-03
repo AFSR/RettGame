@@ -1,9 +1,13 @@
 import SwiftUI
 import ARKit
 
-struct EyeGameView: View {
+/// Déclinaison native du jeu "Bulles colorées" de GazePlay : des bulles
+/// montent depuis le bas, l'enfant les fait éclater en les regardant. La
+/// pipeline gaze (ARKit → calibrator → Kalman → dwell) est partagée avec
+/// les autres jeux via la persistance UserDefaults du calibrateur.
+struct BubblesGameView: View {
     @AppStorage("childFirstName") private var childFirstName: String = ""
-    @State private var viewModel = EyeGameViewModel()
+    @State private var viewModel = BubblesGameViewModel()
 
     var body: some View {
         Group {
@@ -15,14 +19,14 @@ struct EyeGameView: View {
                     ConfigurationView(viewModel: viewModel)
                 case .playing:
                     PlayingView(viewModel: viewModel, childName: childFirstName)
-                case .finished(let score, let total):
-                    FinishedView(score: score, total: total, childName: childFirstName) {
+                case .finished(let score):
+                    FinishedView(score: score, childName: childFirstName) {
                         viewModel.reset()
                     }
                 }
             }
         }
-        .navigationTitle("Jeu du Regard")
+        .navigationTitle("Bulles colorées")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -37,7 +41,7 @@ private struct UnsupportedView: View {
                 .foregroundStyle(.afsrPurpleLight)
             Text("Appareil non compatible")
                 .font(AFSRFont.headline())
-            Text("Le jeu de regard nécessite un iPhone X ou un iPad Pro avec caméra TrueDepth Face ID. Votre appareil n'est pas compatible.")
+            Text("Ce jeu nécessite un iPhone X ou un iPad Pro avec caméra TrueDepth Face ID.")
                 .font(AFSRFont.body())
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
@@ -50,7 +54,7 @@ private struct UnsupportedView: View {
 // MARK: - Configuration
 
 private struct ConfigurationView: View {
-    @Bindable var viewModel: EyeGameViewModel
+    @Bindable var viewModel: BubblesGameViewModel
     @State private var showCalibration = false
 
     var body: some View {
@@ -70,32 +74,29 @@ private struct ConfigurationView: View {
                             .foregroundStyle(.afsrEmergency)
                     }
                 }
-                Section("Nombre de parties") {
-                    Picker("Cibles", selection: $viewModel.targetCount) {
-                        Text("3").tag(3)
-                        Text("5").tag(5)
-                        Text("10").tag(10)
+                Section("Durée") {
+                    Picker("Durée", selection: $viewModel.duration) {
+                        ForEach(BubbleDuration.allCases) { d in Text(d.label).tag(d) }
                     }
                     .pickerStyle(.segmented)
                 }
                 Section("Vitesse") {
                     Picker("Vitesse", selection: $viewModel.speed) {
-                        ForEach(GameSpeed.allCases) { s in Text(s.label).tag(s) }
+                        ForEach(BubbleSpeed.allCases) { s in Text(s.label).tag(s) }
                     }
                     .pickerStyle(.segmented)
                 }
-                Section("Taille des cibles") {
-                    Picker("Taille", selection: $viewModel.targetSize) {
+                Section("Taille des bulles") {
+                    Picker("Taille", selection: $viewModel.bubbleSize) {
                         ForEach(TargetSize.allCases) { s in Text(s.label).tag(s) }
                     }
                     .pickerStyle(.segmented)
                 }
                 Section("Options") {
                     Toggle("Indicateur de regard", isOn: $viewModel.showGazeIndicator)
-                    Toggle("Musique de fond", isOn: $viewModel.musicEnabled)
                 }
                 Section {
-                    Text("Tenez l'appareil face à l'enfant, à 30-60 cm. L'enfant regarde le personnage pour lui envoyer une tarte à la crème 🥧.")
+                    Text("Les bulles montent depuis le bas. Votre enfant les fait éclater en les regardant 🫧.")
                         .font(AFSRFont.caption())
                         .foregroundStyle(.secondary)
                 }
@@ -144,7 +145,7 @@ private struct CalibrationRow: View {
 // MARK: - Playing
 
 private struct PlayingView: View {
-    @Bindable var viewModel: EyeGameViewModel
+    @Bindable var viewModel: BubblesGameViewModel
     let childName: String
 
     @State private var canvasSize: CGSize = .zero
@@ -152,18 +153,19 @@ private struct PlayingView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                Color.black.opacity(0.02).ignoresSafeArea()
+                LinearGradient(
+                    colors: [Color(hex: "#0B1B3A"), Color(hex: "#1F3D7A")],
+                    startPoint: .top, endPoint: .bottom
+                )
+                .ignoresSafeArea()
 
-                // Capture ARKit en arrière-plan (caméra masquée)
                 ARFaceView { point in
                     viewModel.handleGaze(point, in: canvasSize)
                 }
                 .allowsHitTesting(false)
                 .opacity(0.001)
 
-                // Zone tactile pleine surface : un tap du parent = "l'enfant regarde ici".
-                // Placée sous les visuels (qui sont non-interactifs) → reçoit tous les taps
-                // hors des contrôles en haut.
+                // Tap parent → calibration (et pop si la bulle est sous le doigt).
                 Color.clear
                     .contentShape(Rectangle())
                     .gesture(
@@ -173,26 +175,36 @@ private struct PlayingView: View {
                             }
                     )
 
-                // Visuels non-interactifs (les taps les traversent)
-                Group {
-                    if let target = viewModel.currentTarget {
-                        TargetView(target: target, progress: viewModel.processor.dwellProgress)
-                            .position(target.position)
-                            .animation(.easeInOut(duration: 0.35), value: target.position)
-                    }
-                    if let splash = viewModel.splashAt {
-                        SplashView()
-                            .position(splash)
-                            .transition(.scale.combined(with: .opacity))
-                    }
-                    if viewModel.showGazeIndicator {
-                        Circle()
-                            .fill(Color.afsrPurple.opacity(0.4))
-                            .frame(width: 20, height: 20)
-                            .position(viewModel.lastGazePoint)
-                    }
+                // Bulles — non interactives, le pop passe par le dwell ou
+                // via le tap parent au-dessus.
+                ForEach(viewModel.bubbles) { bubble in
+                    BubbleView(
+                        bubble: bubble,
+                        progress: viewModel.processor.currentTargetId == bubble.id
+                            ? viewModel.processor.dwellProgress
+                            : 0
+                    )
+                    .position(bubble.position)
+                    .transition(.scale.combined(with: .opacity))
                 }
                 .allowsHitTesting(false)
+
+                if let splash = viewModel.splashAt {
+                    PopSplash()
+                        .position(splash)
+                        .transition(.scale.combined(with: .opacity))
+                        .allowsHitTesting(false)
+                }
+
+                if viewModel.showGazeIndicator {
+                    Circle()
+                        .fill(Color.blue.opacity(0.55))
+                        .frame(width: 22, height: 22)
+                        .overlay(Circle().stroke(Color.white.opacity(0.9), lineWidth: 2))
+                        .shadow(color: .blue.opacity(0.5), radius: 6)
+                        .position(viewModel.lastGazePoint)
+                        .allowsHitTesting(false)
+                }
 
                 VStack {
                     HStack {
@@ -200,19 +212,11 @@ private struct PlayingView: View {
                             .buttonStyle(.borderedProminent)
                             .tint(.afsrPurpleAdaptive)
                         Spacer()
-                        CalibrationBadge(count: viewModel.calibrator.samplesCount) {
-                            viewModel.resetCalibration()
-                        }
+                        TimerBadge(remaining: viewModel.timeRemaining)
                         ScoreBadge(score: viewModel.score)
                     }
                     .padding()
                     Spacer()
-                    Text("Touchez le personnage quand votre enfant le regarde — cela calibre le suivi du regard.")
-                        .font(AFSRFont.caption())
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 16)
                 }
                 .allowsHitTesting(true)
             }
@@ -236,44 +240,56 @@ private struct PlayingView: View {
     }
 }
 
-private struct TargetView: View {
-    let target: GameTarget
+private struct BubbleView: View {
+    let bubble: Bubble
     let progress: Double
 
     var body: some View {
+        let color = BubblesPalette.color(at: bubble.colorIndex)
         ZStack {
             Circle()
-                .stroke(Color.afsrPurple.opacity(0.3), lineWidth: 6)
-                .frame(width: target.diameter + 16, height: target.diameter + 16)
+                .fill(
+                    RadialGradient(
+                        colors: [color.opacity(0.95), color.opacity(0.55)],
+                        center: .topLeading,
+                        startRadius: 4,
+                        endRadius: bubble.diameter
+                    )
+                )
+                .overlay(
+                    Circle().stroke(Color.white.opacity(0.6), lineWidth: 2)
+                )
+                .frame(width: bubble.diameter, height: bubble.diameter)
+                .shadow(color: color.opacity(0.5), radius: 6)
+
+            // Highlight pour effet "bulle".
+            Circle()
+                .fill(Color.white.opacity(0.35))
+                .frame(width: bubble.diameter * 0.25, height: bubble.diameter * 0.25)
+                .offset(x: -bubble.diameter * 0.18, y: -bubble.diameter * 0.18)
+
             Circle()
                 .trim(from: 0, to: CGFloat(progress))
-                .stroke(Color.afsrPurple, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                .frame(width: target.diameter + 16, height: target.diameter + 16)
+                .stroke(Color.white, style: StrokeStyle(lineWidth: 5, lineCap: .round))
                 .rotationEffect(.degrees(-90))
+                .frame(width: bubble.diameter + 14, height: bubble.diameter + 14)
                 .animation(.linear(duration: 0.1), value: progress)
-
-            Text("😄")
-                .font(.system(size: target.diameter * 0.7))
-                .frame(width: target.diameter, height: target.diameter)
         }
     }
 }
 
-private struct SplashView: View {
-    @State private var scale: CGFloat = 0.2
+private struct PopSplash: View {
+    @State private var scale: CGFloat = 0.4
     @State private var opacity: Double = 1
+
     var body: some View {
-        Text("🥧")
-            .font(.system(size: 220))
+        Text("✨")
+            .font(.system(size: 100))
             .scaleEffect(scale)
             .opacity(opacity)
             .onAppear {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                    scale = 1.2
-                }
-                withAnimation(.easeOut(duration: 1.0).delay(0.3)) {
-                    opacity = 0
-                }
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) { scale = 1.4 }
+                withAnimation(.easeOut(duration: 0.7).delay(0.1)) { opacity = 0 }
             }
     }
 }
@@ -290,73 +306,21 @@ private struct ScoreBadge: View {
     }
 }
 
-/// Badge indiquant le nombre de points de calibration enregistrés.
-/// Long-press pour réinitialiser.
-private struct CalibrationBadge: View {
-    let count: Int
-    let onReset: () -> Void
-
-    @State private var showResetConfirm = false
-
-    private var status: (icon: String, color: Color, label: String) {
-        switch count {
-        case 0:    return ("scope", .orange, "Non calibré")
-        case 1:    return ("scope", .orange, "1 pt")
-        case 2...4: return ("scope", .yellow, "\(count) pts")
-        default:   return ("scope", .afsrSuccess, "\(count) pts")
-        }
+private struct TimerBadge: View {
+    let remaining: TimeInterval
+    private var formatted: String {
+        let total = max(0, Int(remaining.rounded(.up)))
+        let m = total / 60
+        let s = total % 60
+        return m > 0 ? String(format: "%d:%02d", m, s) : "\(s)s"
     }
-
     var body: some View {
         HStack(spacing: 6) {
-            // Badge cliquable → menu
-            Menu {
-                Section("Calibration") {
-                    Label(status.label, systemImage: status.icon)
-                }
-                Section {
-                    Text("Touchez le personnage quand votre enfant le regarde pour calibrer le suivi du regard. Les points sont conservés entre les parties.")
-                }
-                Button(role: .destructive) {
-                    showResetConfirm = true
-                } label: {
-                    Label("Réinitialiser la calibration", systemImage: "arrow.counterclockwise")
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: status.icon).foregroundStyle(status.color)
-                    Text(status.label).font(AFSRFont.caption())
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(.ultraThinMaterial, in: Capsule())
-            }
-            .accessibilityLabel("Calibration : \(status.label). Toucher pour les options.")
-
-            // Bouton reset visible directement (en complément du menu, au cas où)
-            Button {
-                showResetConfirm = true
-            } label: {
-                Image(systemName: "arrow.counterclockwise.circle.fill")
-                    .font(.system(size: 26))
-                    .foregroundStyle(.afsrEmergency.opacity(0.85))
-                    .background(Circle().fill(Color.white.opacity(0.001))) // hit-area
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Réinitialiser la calibration du regard")
+            Image(systemName: "timer").foregroundStyle(.afsrPurpleLight)
+            Text(formatted).font(AFSRFont.headline()).monospacedDigit()
         }
-        .confirmationDialog(
-            "Réinitialiser la calibration ?",
-            isPresented: $showResetConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Réinitialiser", role: .destructive) { onReset() }
-            Button("Annuler", role: .cancel) { }
-        } message: {
-            Text("Tous les points de calibration enregistrés seront supprimés. Vous devrez retaper sur le personnage pour recalibrer le suivi du regard.")
-        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(.ultraThinMaterial, in: Capsule())
     }
 }
 
@@ -364,18 +328,17 @@ private struct CalibrationBadge: View {
 
 private struct FinishedView: View {
     let score: Int
-    let total: Int
     let childName: String
     let onRestart: () -> Void
 
     var body: some View {
         VStack(spacing: 24) {
             Spacer()
-            Text("🎉")
+            Text("🫧")
                 .font(.system(size: 120))
             Text(childName.isEmpty ? "Bravo !" : "Bravo \(childName) !")
                 .font(AFSRFont.title(36))
-            Text("Tu as visé \(score) fois sur \(total) !")
+            Text("Tu as fait éclater \(score) bulle\(score > 1 ? "s" : "") !")
                 .font(AFSRFont.headline())
                 .foregroundStyle(.secondary)
             Spacer()
@@ -384,8 +347,4 @@ private struct FinishedView: View {
             Spacer()
         }
     }
-}
-
-#Preview("Config") {
-    NavigationStack { EyeGameView() }
 }

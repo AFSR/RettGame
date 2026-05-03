@@ -1,13 +1,25 @@
 import SwiftUI
 
-/// Session de calibration guidée : 9 cibles successives sur une grille 3×3.
+/// Session de calibration guidée : cibles successives sur une grille 3×3
+/// (cyclées indéfiniment). Le parent attire le regard de l'enfant sur chaque
+/// cible et tape n'importe où à l'écran quand l'enfant la regarde — chaque tap
+/// enregistre une paire `(rawGaze courant, position cible)` dans le calibrateur
+/// partagé `GazeCalibrator.shared`.
 ///
-/// Le parent tient l'appareil face à l'enfant, attire son regard sur chaque
-/// cible, et tape n'importe où à l'écran quand l'enfant la regarde. Chaque tap
-/// enregistre une paire `(rawGaze courant, position cible)` dans le calibrateur.
+/// L'écran ne s'auto-ferme pas : une fois le minimum atteint (`minimumSamples`),
+/// le bouton "Terminer" apparaît et l'utilisateur peut continuer à ajouter
+/// autant de points qu'il le souhaite avant de quitter. Les samples sont
+/// persistés à chaque tap, donc fermer ne perd jamais le travail déjà fait.
 struct GazeCalibrationView: View {
     @Environment(\.dismiss) private var dismiss
-    let viewModel: EyeGameViewModel
+
+    private let calibrator = GazeCalibrator.shared
+    /// Filtre Kalman local à la session de calibration : permet d'afficher un
+    /// point bleu lissé qui suit le regard, sans toucher au filtre du jeu en
+    /// cours côté game-VM.
+    @State private var kalman = GazeKalmanFilter()
+    @State private var rawGazePoint: CGPoint = .zero
+    @State private var displayPoint: CGPoint = .zero
 
     private let normalizedPositions: [CGPoint] = [
         CGPoint(x: 0.15, y: 0.22), CGPoint(x: 0.50, y: 0.22), CGPoint(x: 0.85, y: 0.22),
@@ -15,57 +27,87 @@ struct GazeCalibrationView: View {
         CGPoint(x: 0.15, y: 0.78), CGPoint(x: 0.50, y: 0.78), CGPoint(x: 0.85, y: 0.78),
     ]
 
+    let minimumSamples: Int
+
+    init(minimumSamples: Int = EyeGameViewModel.minimumCalibrationSamples) {
+        self.minimumSamples = minimumSamples
+    }
+
     @State private var currentIndex: Int = 0
     @State private var canvasSize: CGSize = .zero
-    @State private var finished: Bool = false
     @State private var pulse: Bool = false
+    @State private var showRejectedFeedback: Bool = false
+    @State private var splashAtTarget: Bool = false
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
                 Color.black.ignoresSafeArea()
 
+                // ARKit en arrière-plan : on lit le regard, on l'applique au
+                // calibrateur partagé pour le point bleu d'affichage.
                 ARFaceView { point in
-                    viewModel.rawGazePoint = point
+                    rawGazePoint = point
+                    let calibrated = calibrator.apply(point)
+                    displayPoint = kalman.filter(measurement: calibrated)
                 }
                 .allowsHitTesting(false)
                 .opacity(0.001)
 
+                // Indicateur de regard (bleu) — non interactif, suit displayPoint.
+                GazeIndicator()
+                    .position(displayPoint)
+                    .allowsHitTesting(false)
+
+                // Couche de capture des taps : au-dessus de l'AR + indicateur,
+                // mais sous les visuels de cible (qui ne capturent pas) et la UI.
                 Color.clear
                     .contentShape(Rectangle())
-                    .onTapGesture {
-                        handleTap()
-                    }
+                    .onTapGesture { handleTap() }
 
-                if !finished, currentIndex < normalizedPositions.count {
-                    let p = currentPosition(in: geo.size)
-                    TargetDot(diameter: 110, pulsing: pulse)
-                        .position(p)
-                        .transition(.scale.combined(with: .opacity))
-                        .id(currentIndex)
-                }
+                // Cible courante — purement visuelle.
+                let p = currentPosition(in: geo.size)
+                TargetDot(diameter: 110, pulsing: pulse, splashing: splashAtTarget)
+                    .position(p)
+                    .allowsHitTesting(false)
 
                 VStack {
                     HStack {
-                        Button("Annuler") { dismiss() }
+                        Button("Fermer") { dismiss() }
                             .buttonStyle(.borderedProminent)
                             .tint(.afsrPurpleAdaptive)
                         Spacer()
                         ProgressBadge(
-                            current: min(currentIndex, normalizedPositions.count),
-                            total: normalizedPositions.count
+                            samples: calibrator.samplesCount,
+                            minimum: minimumSamples
                         )
                     }
                     .padding()
 
                     Spacer()
 
-                    if finished {
-                        FinishedBanner()
-                            .padding(.bottom, 40)
+                    if showRejectedFeedback {
+                        FeedbackBanner(
+                            text: "Visage non détecté — placez l'enfant face à la caméra avant de taper.",
+                            color: .afsrEmergency
+                        )
+                        .transition(.opacity)
+                        .padding(.horizontal, 24)
                     } else {
                         InstructionBanner()
                             .padding(.horizontal, 24)
+                    }
+
+                    if calibrator.samplesCount >= minimumSamples {
+                        AFSRPrimaryButton(title: "Terminer", icon: "checkmark.circle.fill") {
+                            dismiss()
+                        }
+                        .padding()
+                    } else {
+                        let needed = minimumSamples - calibrator.samplesCount
+                        Text("Encore \(needed) point\(needed > 1 ? "s" : "") avant de pouvoir terminer.")
+                            .font(AFSRFont.caption())
+                            .foregroundStyle(.white.opacity(0.7))
                             .padding(.bottom, 24)
                     }
                 }
@@ -82,32 +124,49 @@ struct GazeCalibrationView: View {
     }
 
     private func currentPosition(in size: CGSize) -> CGPoint {
-        let n = normalizedPositions[currentIndex]
+        let n = normalizedPositions[currentIndex % normalizedPositions.count]
         return CGPoint(x: n.x * size.width, y: n.y * size.height)
     }
 
     private func handleTap() {
-        guard !finished, currentIndex < normalizedPositions.count else { return }
         let target = currentPosition(in: canvasSize)
-        // Ignore le tap si ARKit n'a pas encore fourni de regard valide :
-        // mieux vaut redemander que d'enregistrer un (0,0) → cible.
-        guard viewModel.recordCalibrationSample(actual: target) else { return }
-
-        let next = currentIndex + 1
-        if next >= normalizedPositions.count {
-            withAnimation(.easeOut(duration: 0.3)) { finished = true }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
-                dismiss()
+        guard rawGazePoint != .zero else {
+            withAnimation(.easeInOut(duration: 0.2)) { showRejectedFeedback = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
+                withAnimation(.easeInOut(duration: 0.3)) { showRejectedFeedback = false }
             }
-        } else {
-            withAnimation(.easeInOut(duration: 0.25)) { currentIndex = next }
+            return
         }
+        calibrator.addSample(raw: rawGazePoint, actual: target)
+        showRejectedFeedback = false
+
+        withAnimation(.easeOut(duration: 0.18)) { splashAtTarget = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            splashAtTarget = false
+            withAnimation(.easeInOut(duration: 0.25)) {
+                currentIndex = currentIndex + 1
+            }
+        }
+    }
+}
+
+private struct GazeIndicator: View {
+    var body: some View {
+        Circle()
+            .fill(Color.blue.opacity(0.55))
+            .frame(width: 26, height: 26)
+            .overlay(
+                Circle().stroke(Color.white.opacity(0.9), lineWidth: 2)
+            )
+            .shadow(color: .blue.opacity(0.6), radius: 8)
+            .accessibilityHidden(true)
     }
 }
 
 private struct TargetDot: View {
     let diameter: CGFloat
     let pulsing: Bool
+    let splashing: Bool
 
     var body: some View {
         ZStack {
@@ -119,6 +178,8 @@ private struct TargetDot: View {
             Circle()
                 .fill(Color.afsrPurple)
                 .frame(width: diameter, height: diameter)
+                .scaleEffect(splashing ? 1.25 : 1.0)
+                .opacity(splashing ? 0.5 : 1.0)
             Text("👀")
                 .font(.system(size: diameter * 0.6))
         }
@@ -127,13 +188,17 @@ private struct TargetDot: View {
 }
 
 private struct ProgressBadge: View {
-    let current: Int
-    let total: Int
+    let samples: Int
+    let minimum: Int
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "scope").foregroundStyle(.afsrPurpleLight)
-            Text("\(current) / \(total)").font(AFSRFont.headline()).monospacedDigit()
+            Image(systemName: "scope")
+                .foregroundStyle(samples >= minimum ? Color.afsrSuccess : Color.afsrPurpleLight)
+            Text("\(samples)")
+                .font(AFSRFont.headline())
+                .monospacedDigit()
+            Text("/ \(minimum) min").font(AFSRFont.caption()).foregroundStyle(.white.opacity(0.7))
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(.ultraThinMaterial, in: Capsule())
@@ -143,25 +208,34 @@ private struct ProgressBadge: View {
 
 private struct InstructionBanner: View {
     var body: some View {
-        Text("Attirez le regard de votre enfant sur la cible, puis touchez l'écran quand il la regarde.")
-            .font(AFSRFont.body())
-            .foregroundStyle(.white)
-            .multilineTextAlignment(.center)
-            .padding()
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        VStack(spacing: 6) {
+            Text("Tapez l'écran quand votre enfant regarde la cible")
+                .font(AFSRFont.headline())
+            Text("Le point bleu suit son regard. La cible cycle sur 9 positions, refaites-en autant que vous voulez.")
+                .font(AFSRFont.caption())
+                .foregroundStyle(.white.opacity(0.85))
+        }
+        .multilineTextAlignment(.center)
+        .foregroundStyle(.white)
+        .padding()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
     }
 }
 
-private struct FinishedBanner: View {
+private struct FeedbackBanner: View {
+    let text: String
+    let color: Color
+
     var body: some View {
-        VStack(spacing: 12) {
-            Text("🎯")
-                .font(.system(size: 64))
-            Text("Calibration terminée")
-                .font(AFSRFont.title(28))
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title3)
+                .foregroundStyle(color)
+            Text(text)
+                .font(AFSRFont.body(15))
                 .foregroundStyle(.white)
         }
-        .padding(.horizontal, 32).padding(.vertical, 24)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .padding()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
     }
 }

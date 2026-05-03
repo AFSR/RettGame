@@ -51,7 +51,7 @@ struct EyeGameSettingsSection: View {
             titleVisibility: .visible
         ) {
             Button("Réinitialiser", role: .destructive) {
-                GazeCalibrator().reset()  // efface les samples persistés dans UserDefaults
+                GazeCalibrator.shared.reset()
             }
             Button("Annuler", role: .cancel) { }
         } message: {

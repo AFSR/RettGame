@@ -15,7 +15,8 @@
 		83D46D41EFDE2F1289B8849A /* GazeCalibrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62786BA0B838B7DCE3EFB815 /* GazeCalibrator.swift */; };
 		8FE89530940E3152E200AD2A /* GazeProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68DF3BAFBF2B9ED37E0FDB42 /* GazeProcessor.swift */; };
 		A1B2C3D4E5F61234567890AC /* GazeCalibrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F61234567890AB /* GazeCalibrationView.swift */; };
-		A1B2C3D4E5F61234567890AE /* SafariView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F61234567890AD /* SafariView.swift */; };
+		B0BB1ECCAFE0000000000003 /* BubblesGameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0BB1ECCAFE0000000000002 /* BubblesGameView.swift */; };
+		B0BB1ECCAFE0000000000005 /* BubblesGameViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0BB1ECCAFE0000000000004 /* BubblesGameViewModel.swift */; };
 		953EDF9273E0DD3F39583F26 /* EyeGameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4811327C6B6345B92DE32FD7 /* EyeGameView.swift */; };
 		955DE7286B8E62D6FC4786F0 /* EyeGameViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75B603EF4AB7DBE30C5A22BB /* EyeGameViewModel.swift */; };
 		AF4E7470F652BC3AC314677F /* ARViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F39AB8279FBE149919D00D28 /* ARViewController.swift */; };
@@ -50,7 +51,8 @@
 		E89F4D7F12C1D76F3623B55A /* GameRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GameRootView.swift; sourceTree = "<group>"; };
 		F39AB8279FBE149919D00D28 /* ARViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ARViewController.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F61234567890AB /* GazeCalibrationView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GazeCalibrationView.swift; sourceTree = "<group>"; };
-		A1B2C3D4E5F61234567890AD /* SafariView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SafariView.swift; sourceTree = "<group>"; };
+		B0BB1ECCAFE0000000000002 /* BubblesGameView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BubblesGameView.swift; sourceTree = "<group>"; };
+		B0BB1ECCAFE0000000000004 /* BubblesGameViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BubblesGameViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -87,9 +89,17 @@
 			isa = PBXGroup;
 			children = (
 				4962CFBA2F4EB94126300799 /* AFSRButton.swift */,
-				A1B2C3D4E5F61234567890AD /* SafariView.swift */,
 			);
 			path = Components;
+			sourceTree = "<group>";
+		};
+		B0BB1ECCAFE0000000000001 /* Bubbles */ = {
+			isa = PBXGroup;
+			children = (
+				B0BB1ECCAFE0000000000002 /* BubblesGameView.swift */,
+				B0BB1ECCAFE0000000000004 /* BubblesGameViewModel.swift */,
+			);
+			path = Bubbles;
 			sourceTree = "<group>";
 		};
 		86475D1513FB3B3A1518081C /* Products */ = {
@@ -155,6 +165,7 @@
 		CA4C4909E170299B12D2215E /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				B0BB1ECCAFE0000000000001 /* Bubbles */,
 				9B9E799345D2B38884C66545 /* EyeGame */,
 				D992969C56592202061B3923 /* Settings */,
 			);
@@ -261,11 +272,12 @@
 				B39A08F6FCBAE317AE2EF49A /* GazeKalmanFilter.swift in Sources */,
 				8FE89530940E3152E200AD2A /* GazeProcessor.swift in Sources */,
 				A1B2C3D4E5F61234567890AC /* GazeCalibrationView.swift in Sources */,
+				B0BB1ECCAFE0000000000003 /* BubblesGameView.swift in Sources */,
+				B0BB1ECCAFE0000000000005 /* BubblesGameViewModel.swift in Sources */,
 				EFC10E35BDADDFEF5FE06C50 /* GameSettingsView.swift in Sources */,
 				C4075EBCDD77CE8FFACCFD80 /* GameRootView.swift in Sources */,
 				3B8A8E68E11AF109B71F6234 /* RettGameApp.swift in Sources */,
 				FF73F443C49265428EF0F18D /* AFSRButton.swift in Sources */,
-				A1B2C3D4E5F61234567890AE /* SafariView.swift in Sources */,
 				E090F02EBAF387AB0B09C9F9 /* AFSRTheme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

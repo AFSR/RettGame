@@ -32,7 +32,7 @@ final class EyeGameViewModel {
     var splashAt: CGPoint? = nil
 
     let processor = GazeProcessor()
-    let calibrator = GazeCalibrator()
+    let calibrator = GazeCalibrator.shared
     let kalman = GazeKalmanFilter()
     private var spawnedCount = 0
     private var audioPlayer: AVAudioPlayer?
@@ -89,9 +89,12 @@ final class EyeGameViewModel {
         state = .configuration
     }
 
+    /// Seuil minimum de points calibrés pour pouvoir lancer une partie.
+    static let minimumCalibrationSamples = 9
+
     /// Considère le suivi calibré dès qu'on a au moins 9 échantillons (une session
     /// guidée complète sur grille 3×3). En-dessous, le bouton "Lancer" est bloqué.
-    var hasCalibration: Bool { calibrator.samplesCount >= 9 }
+    var hasCalibration: Bool { calibrator.samplesCount >= Self.minimumCalibrationSamples }
 
     /// Pipeline : raw (ARKit) → calibration linéaire → filtre de Kalman → affichage + dwell.
     /// Quand le dwell réussit sur une cible, on enrichit la calibration avec la paire

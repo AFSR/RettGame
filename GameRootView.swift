@@ -1,13 +1,10 @@
 import SwiftUI
 
 /// Vue racine de RettGame : menu de lancement listant les expériences de jeu
-/// disponibles (natif + portail web GazePlay). Lien vers les réglages dans la
+/// natives (déclinaisons des jeux GazePlay). Lien vers les réglages dans la
 /// barre d'outils.
 struct GameRootView: View {
     @State private var showSettings = false
-    @State private var showWebGazePlay = false
-
-    private static let gazePlayURL = URL(string: "https://interaactionweb.afsr.fr/gazeplay/")!
 
     var body: some View {
         NavigationStack {
@@ -20,22 +17,20 @@ struct GameRootView: View {
                         EyeGameView()
                     } label: {
                         GameCard(
-                            title: "Jeu du Regard",
-                            subtitle: "Tarte à la crème — pilotage par le regard via la caméra TrueDepth.",
-                            iconSystemName: "eye.fill",
-                            badge: "Natif"
+                            title: "Tartes à la crème",
+                            subtitle: "Vise les personnages avec ton regard pour leur envoyer une tarte 🥧.",
+                            iconSystemName: "fork.knife.circle.fill"
                         )
                     }
                     .buttonStyle(.plain)
 
-                    Button {
-                        showWebGazePlay = true
+                    NavigationLink {
+                        BubblesGameView()
                     } label: {
                         GameCard(
-                            title: "GazePlay",
-                            subtitle: "Bulles colorées et autres jeux web pilotables au regard, depuis le portail InterAACtion.",
-                            iconSystemName: "play.rectangle.fill",
-                            badge: "Web"
+                            title: "Bulles colorées",
+                            subtitle: "Fais éclater les bulles qui montent en les regardant 🫧.",
+                            iconSystemName: "circle.hexagongrid.fill"
                         )
                     }
                     .buttonStyle(.plain)
@@ -59,19 +54,6 @@ struct GameRootView: View {
             .sheet(isPresented: $showSettings) {
                 NavigationStack { GameSettingsView() }
             }
-            .fullScreenCover(isPresented: $showWebGazePlay) {
-                NavigationStack {
-                    SafariView(url: Self.gazePlayURL)
-                        .ignoresSafeArea()
-                        .navigationTitle("GazePlay")
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar {
-                            ToolbarItem(placement: .topBarLeading) {
-                                Button("Fermer") { showWebGazePlay = false }
-                            }
-                        }
-                }
-            }
         }
     }
 }
@@ -94,7 +76,6 @@ private struct GameCard: View {
     let title: String
     let subtitle: String
     let iconSystemName: String
-    let badge: String
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
@@ -108,16 +89,9 @@ private struct GameCard: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Text(title)
-                        .font(AFSRFont.headline(20))
-                        .foregroundStyle(.primary)
-                    Text(badge)
-                        .font(AFSRFont.caption(11))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(Color.afsrPurpleAdaptive, in: Capsule())
-                }
+                Text(title)
+                    .font(AFSRFont.headline(20))
+                    .foregroundStyle(.primary)
                 Text(subtitle)
                     .font(AFSRFont.body(15))
                     .foregroundStyle(.secondary)
