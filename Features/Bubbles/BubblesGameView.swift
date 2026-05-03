@@ -154,7 +154,7 @@ private struct PlayingView: View {
         GeometryReader { geo in
             ZStack {
                 LinearGradient(
-                    colors: [Color(hex: "#0B1B3A"), Color(hex: "#1F3D7A")],
+                    colors: [Color(hex: "#BFE3FF"), Color(hex: "#7CC4F2")],
                     startPoint: .top, endPoint: .bottom
                 )
                 .ignoresSafeArea()
