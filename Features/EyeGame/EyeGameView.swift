@@ -51,10 +51,25 @@ private struct UnsupportedView: View {
 
 private struct ConfigurationView: View {
     @Bindable var viewModel: EyeGameViewModel
+    @State private var showCalibration = false
 
     var body: some View {
         VStack(spacing: 0) {
             Form {
+                Section {
+                    CalibrationRow(
+                        sampleCount: viewModel.calibrator.samplesCount,
+                        isCalibrated: viewModel.hasCalibration,
+                        onCalibrate: { showCalibration = true }
+                    )
+                } header: {
+                    Text("Calibration du regard")
+                } footer: {
+                    if !viewModel.hasCalibration {
+                        Text("Une calibration est nécessaire avant de jouer.")
+                            .foregroundStyle(.afsrEmergency)
+                    }
+                }
                 Section("Nombre de parties") {
                     Picker("Cibles", selection: $viewModel.targetCount) {
                         Text("3").tag(3)
@@ -89,9 +104,40 @@ private struct ConfigurationView: View {
             AFSRPrimaryButton(title: "Lancer la partie", icon: "play.fill") {
                 viewModel.launchPlaying()
             }
+            .disabled(!viewModel.hasCalibration)
+            .opacity(viewModel.hasCalibration ? 1 : 0.5)
             .padding()
             .background(Color(.systemBackground))
         }
+        .fullScreenCover(isPresented: $showCalibration) {
+            GazeCalibrationView(viewModel: viewModel)
+        }
+    }
+}
+
+private struct CalibrationRow: View {
+    let sampleCount: Int
+    let isCalibrated: Bool
+    let onCalibrate: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: isCalibrated ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .font(.system(size: 28))
+                .foregroundStyle(isCalibrated ? Color.afsrSuccess : Color.afsrEmergency)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(isCalibrated ? "Calibré" : "Non calibré")
+                    .font(AFSRFont.headline())
+                Text("\(sampleCount) point\(sampleCount > 1 ? "s" : "") enregistré\(sampleCount > 1 ? "s" : "")")
+                    .font(AFSRFont.caption())
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button(isCalibrated ? "Recalibrer" : "Calibrer", action: onCalibrate)
+                .buttonStyle(.borderedProminent)
+                .tint(.afsrPurpleAdaptive)
+        }
+        .padding(.vertical, 4)
     }
 }
 

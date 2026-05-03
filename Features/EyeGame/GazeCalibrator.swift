@@ -32,7 +32,7 @@ final class GazeCalibrator {
     private(set) var scaleY: CGFloat = 1
     private(set) var offsetY: CGFloat = 0
 
-    init(maxSamples: Int = 30) {
+    init(maxSamples: Int = 200) {
         self.maxSamples = maxSamples
         load()
         recompute()

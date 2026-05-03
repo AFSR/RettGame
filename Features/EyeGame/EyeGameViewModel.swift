@@ -89,7 +89,13 @@ final class EyeGameViewModel {
         state = .configuration
     }
 
+    /// Considère le suivi calibré dès qu'on a au moins 9 échantillons (une session
+    /// guidée complète sur grille 3×3). En-dessous, le bouton "Lancer" est bloqué.
+    var hasCalibration: Bool { calibrator.samplesCount >= 9 }
+
     /// Pipeline : raw (ARKit) → calibration linéaire → filtre de Kalman → affichage + dwell.
+    /// Quand le dwell réussit sur une cible, on enrichit la calibration avec la paire
+    /// `(rawGazePoint, target.position)` — l'enfant regardait la cible par construction.
     func handleGaze(_ rawPoint: CGPoint, in canvasSize: CGSize) {
         rawGazePoint = rawPoint
         let calibrated = calibrator.apply(rawPoint)
@@ -99,6 +105,7 @@ final class EyeGameViewModel {
 
         guard state == .playing, let target = currentTarget else { return }
         if processor.update(gazePoint: smoothed, targets: [target]) != nil {
+            recordCalibrationSample(actual: target.position)
             completeTarget(canvasSize: canvasSize)
         }
     }
@@ -108,13 +115,7 @@ final class EyeGameViewModel {
     /// - ajuste la confiance du Kalman (R diminue avec plus d'échantillons)
     /// - si le tap est proche de la cible courante, valide la cible
     func recordCalibrationTap(at location: CGPoint, canvasSize: CGSize) {
-        calibrator.addSample(raw: rawGazePoint, actual: location)
-        kalman.setCalibrationConfidence(sampleCount: calibrator.samplesCount)
-
-        // Rafraîchit immédiatement la position affichée avec la nouvelle transformation.
-        let newCalibrated = calibrator.apply(rawGazePoint)
-        calibratedGazePoint = newCalibrated
-        lastGazePoint = kalman.filter(measurement: newCalibrated)
+        recordCalibrationSample(actual: location)
 
         guard state == .playing, let target = currentTarget else { return }
         let dx = location.x - target.position.x
@@ -123,6 +124,22 @@ final class EyeGameViewModel {
         if dist < target.diameter / 2 + 40 {
             completeTarget(canvasSize: canvasSize)
         }
+    }
+
+    /// Enregistre un échantillon de calibration sans vérification de proximité.
+    /// Utilisé par la session guidée (cibles à position connue) et par le pipeline
+    /// dwell-réussi. Retourne `false` si ARKit n'a pas encore produit de regard
+    /// (rawGazePoint à zéro) — l'appelant peut signaler le tap comme à refaire.
+    @discardableResult
+    func recordCalibrationSample(actual: CGPoint) -> Bool {
+        guard rawGazePoint != .zero else { return false }
+        calibrator.addSample(raw: rawGazePoint, actual: actual)
+        kalman.setCalibrationConfidence(sampleCount: calibrator.samplesCount)
+
+        let newCalibrated = calibrator.apply(rawGazePoint)
+        calibratedGazePoint = newCalibrated
+        lastGazePoint = kalman.filter(measurement: newCalibrated)
+        return true
     }
 
     func resetCalibration() {
