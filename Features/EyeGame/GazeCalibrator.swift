@@ -2,38 +2,38 @@ import Foundation
 import CoreGraphics
 import Observation
 
-/// Calibrateur du regard — modèle **affine 1D par axe**.
+/// Calibrateur du regard — modèle **quadratique par axe**.
 ///
-/// On apprend deux régressions linéaires indépendantes :
+/// Pour chaque axe (x et y indépendamment) on apprend :
 /// ```
-/// ax = m00 · rx + tx
-/// ay = m11 · ry + ty
+/// ax = b₂ · (rx - μᵣ)² + b₁ · (rx - μᵣ) + μₐ
 /// ```
-/// (les termes croisés `m01` et `m10` sont forcés à 0.)
+/// où `μᵣ` est la moyenne des raw, `μₐ` la moyenne des actual.
 ///
-/// Le modèle 2D affine complet à 6 paramètres a été tenté précédemment mais
-/// s'effondrait sur des jeux de samples réalistes : la moindre corrélation
-/// parasite entre rx et ry (tête légèrement inclinée, regard diagonal, etc.)
-/// rendait X^T X mal conditionnée, OLS collapsait alors vers la moyenne des
-/// `actual` et le calibrateur figeait son output au centre de l'écran.
+/// **Pourquoi quadratique et pas affine ?** Le signal blendShape d'ARKit n'est
+/// pas linéaire en l'angle de regard : la combinaison `(outR + inL) - (outL + inR)`
+/// sature aux bords (les blendShapes individuels plafonnent à 1.0), donc le
+/// raw écran sous-estime les positions extrêmes — un fit purement linéaire
+/// compresse systématiquement le coin haut-gauche et le coin bas-droit vers
+/// le centre. Le terme `b₂·(rx-μ)²` corrige cette courbure.
 ///
-/// Le 1D par axe est moins expressif mais beaucoup plus robuste : il ne peut
-/// pas corriger une rotation, mais peut absorber gain, offset et inversion
-/// d'axe — ce qui couvre 95 % des cas réels.
+/// **Pourquoi par axe et pas 2D ?** L'ajout de termes croisés (`rx·ry`, etc.)
+/// rend le système 6×6 mal conditionné dès qu'il y a la moindre corrélation
+/// parasite entre rx et ry, et OLS collapse vers la moyenne. Le modèle par
+/// axe est moins expressif (ne corrige pas la rotation) mais **structurellement
+/// incapable de collapse**.
 ///
-/// Stabilité numérique : on centre rx/ry/ax/ay sur leur moyenne avant la
-/// régression, ce qui réduit les sommations à des variances/covariances de
-/// magnitude beaucoup plus faible que les sommes brutes (~10^4 vs ~10^7) et
-/// limite la perte de précision flottante.
+/// **Centrage** : on fit en coordonnées centrées (rxc = rx - μᵣ, axc = ax - μₐ),
+/// ce qui élimine l'intercept et stabilise numériquement (les puissances 4
+/// de rx en valeur absolue sont ~10¹⁴ ; en centré, ~10⁸).
 ///
-/// Bornes de sécurité : si le gain calculé sort de `[0.1, 20]` (typiquement
-/// le cas avec des samples dégénérés), on le clamp puis on recalcule
-/// l'intercept en conséquence. Évite que la calibration ne projette tous les
-/// regards à l'infini.
+/// **Bornes de sécurité** : la pente effective au centre `b₁` est clampée à
+/// `[-20, -0.1] ∪ [0.1, 20]` pour éviter qu'un fit dégénéré ne renvoie
+/// l'identité ou n'amplifie à l'infini.
 ///
-/// Rejet d'outliers : après un premier fit on calcule les résidus, on
-/// supprime les samples au-delà de `max(80 px, 3 × médiane)` et on refit.
-/// Cette étape évite qu'un seul tap raté empoisonne toute la calibration.
+/// **Rejet d'outliers** : un premier fit, calcul des résidus, suppression
+/// des samples au-delà de `max(80 px, 3 × médiane)`, refit. Évite qu'un
+/// tap parent raté empoisonne la calibration.
 @Observable
 final class GazeCalibrator {
     static let shared = GazeCalibrator()
@@ -49,17 +49,30 @@ final class GazeCalibrator {
     /// effacer les calibrations existantes des utilisateurs.
     private let persistenceKey = "afsr.eyegame.calibration.samples.v3"
 
-    /// Modèle affine — `m01` et `m10` sont conservés pour API compatibilité
-    /// mais valent toujours 0 dans cette implémentation.
-    private(set) var m00: CGFloat = 1
-    private(set) var m01: CGFloat = 0
-    private(set) var tx:  CGFloat = 0
-    private(set) var m10: CGFloat = 0
-    private(set) var m11: CGFloat = 1
-    private(set) var ty:  CGFloat = 0
+    /// Paramètres ajustés par axe.
+    private struct AxisFit {
+        var meanR: Double = 0      // moyenne raw sur cet axe
+        var meanA: Double = 0      // moyenne actual sur cet axe
+        var b1: Double = 1         // pente effective au centre
+        var b2: Double = 0         // courbure quadratique
+    }
+    private var xFit = AxisFit()
+    private var yFit = AxisFit()
+
+    /// Diagnostic / compat : pente effective au centre = `b₁`.
+    var m00: CGFloat { CGFloat(xFit.b1) }
+    var m11: CGFloat { CGFloat(yFit.b1) }
+    /// Termes croisés non utilisés dans ce modèle (gardés pour compat API).
+    var m01: CGFloat { 0 }
+    var m10: CGFloat { 0 }
+    var tx: CGFloat { CGFloat(xFit.meanA - xFit.b1 * xFit.meanR) }
+    var ty: CGFloat { CGFloat(yFit.meanA - yFit.b1 * yFit.meanR) }
 
     private let minGain: Double = 0.1
     private let maxGain: Double = 20.0
+    /// Minimum d'échantillons avant d'appliquer la transformation. 5 = peu
+    /// au-dessus des 3 nécessaires pour un fit quadratique stable par axe.
+    private let minSamplesToApply: Int = 5
 
     init(maxSamples: Int = 200) {
         self.maxSamples = maxSamples
@@ -85,17 +98,18 @@ final class GazeCalibrator {
 
     func reset() {
         samples.removeAll()
-        m00 = 1; m01 = 0; tx = 0
-        m10 = 0; m11 = 1; ty = 0
+        xFit = AxisFit()
+        yFit = AxisFit()
         save()
     }
 
     func apply(_ raw: CGPoint) -> CGPoint {
-        guard samples.count >= 3 else { return raw }
-        return CGPoint(
-            x: m00 * raw.x + tx,
-            y: m11 * raw.y + ty
-        )
+        guard samples.count >= minSamplesToApply else { return raw }
+        let rxc = Double(raw.x) - xFit.meanR
+        let ryc = Double(raw.y) - yFit.meanR
+        let predX = xFit.b2 * rxc * rxc + xFit.b1 * rxc + xFit.meanA
+        let predY = yFit.b2 * ryc * ryc + yFit.b1 * ryc + yFit.meanA
+        return CGPoint(x: predX, y: predY)
     }
 
     // MARK: - Persistence
@@ -116,20 +130,22 @@ final class GazeCalibrator {
         }
     }
 
-    // MARK: - Regression (per-axis 1D OLS + outlier rejection)
+    // MARK: - Regression (per-axis quadratic OLS + outlier rejection)
 
     private func recompute() {
-        guard samples.count >= 3 else {
-            m00 = 1; m01 = 0; tx = 0
-            m10 = 0; m11 = 1; ty = 0
+        guard samples.count >= minSamplesToApply else {
+            xFit = AxisFit()
+            yFit = AxisFit()
             return
         }
 
-        let p1 = fitPerAxis(samples)
-        apply(params: p1)
+        let p1x = fitAxis(samples, raw: \.rx, actual: \.ax)
+        let p1y = fitAxis(samples, raw: \.ry, actual: \.ay)
+        xFit = p1x
+        yFit = p1y
 
-        // Deuxième passe : rejet d'outliers si on a assez de samples pour
-        // garder ≥3 après filtrage.
+        // Rejet d'outliers : besoin d'au moins 9 samples pour garder ≥ 5 après
+        // filtrage (minimum requis pour fitter à nouveau).
         guard samples.count >= 9 else { return }
 
         let residuals = samples.map { residual(of: $0) }
@@ -140,76 +156,90 @@ final class GazeCalibrator {
             .filter { $0.1 <= threshold }
             .map { $0.0 }
 
-        if inliers.count >= 3 {
-            apply(params: fitPerAxis(inliers))
+        if inliers.count >= minSamplesToApply {
+            xFit = fitAxis(inliers, raw: \.rx, actual: \.ax)
+            yFit = fitAxis(inliers, raw: \.ry, actual: \.ay)
         }
-    }
-
-    private func apply(params p: AffineParams) {
-        m00 = CGFloat(p.m00); m01 = 0; tx = CGFloat(p.tx)
-        m10 = 0; m11 = CGFloat(p.m11); ty = CGFloat(p.ty)
     }
 
     @inline(__always)
     private func residual(of s: Sample) -> Double {
-        let predX = Double(m00) * s.rx + Double(tx)
-        let predY = Double(m11) * s.ry + Double(ty)
+        let rxc = s.rx - xFit.meanR
+        let ryc = s.ry - yFit.meanR
+        let predX = xFit.b2 * rxc * rxc + xFit.b1 * rxc + xFit.meanA
+        let predY = yFit.b2 * ryc * ryc + yFit.b1 * ryc + yFit.meanA
         let dx = predX - s.ax
         let dy = predY - s.ay
         return (dx * dx + dy * dy).squareRoot()
     }
 
-    private struct AffineParams {
-        let m00: Double; let tx: Double
-        let m11: Double; let ty: Double
-    }
-
-    /// OLS centré, axe par axe. Renvoie toujours un modèle valide : si la
-    /// variance d'une dimension est nulle (samples colinéaires sur cet axe),
-    /// on retombe sur l'identité pour cet axe.
-    private func fitPerAxis(_ samples: [Sample]) -> AffineParams {
+    /// Fit quadratique sur un axe via OLS centré.
+    ///
+    /// Modèle : `axc = b₂·rxc² + b₁·rxc` (pas d'intercept, données centrées).
+    /// Équations normales 2×2 fermées :
+    /// ```
+    /// [Σrxc⁴  Σrxc³] [b₂]   [Σrxc²·axc]
+    /// [Σrxc³  Σrxc²] [b₁] = [Σrxc·axc ]
+    /// ```
+    private func fitAxis(_ samples: [Sample],
+                         raw: KeyPath<Sample, Double>,
+                         actual: KeyPath<Sample, Double>) -> AxisFit {
         let n = Double(samples.count)
-        var meanRx = 0.0, meanRy = 0.0, meanAx = 0.0, meanAy = 0.0
+        guard n >= Double(minSamplesToApply) else { return AxisFit() }
+
+        var meanR = 0.0, meanA = 0.0
         for s in samples {
-            meanRx += s.rx; meanRy += s.ry
-            meanAx += s.ax; meanAy += s.ay
+            meanR += s[keyPath: raw]
+            meanA += s[keyPath: actual]
         }
-        meanRx /= n; meanRy /= n; meanAx /= n; meanAy /= n
+        meanR /= n; meanA /= n
 
-        var varRx = 0.0, varRy = 0.0
-        var covRxAx = 0.0, covRyAy = 0.0
+        var s2 = 0.0, s3 = 0.0, s4 = 0.0
+        var sra = 0.0, s2ra = 0.0
         for s in samples {
-            let rxc = s.rx - meanRx
-            let ryc = s.ry - meanRy
-            varRx += rxc * rxc
-            varRy += ryc * ryc
-            covRxAx += rxc * (s.ax - meanAx)
-            covRyAy += ryc * (s.ay - meanAy)
+            let rc = s[keyPath: raw] - meanR
+            let ac = s[keyPath: actual] - meanA
+            let rc2 = rc * rc
+            s2 += rc2
+            s3 += rc2 * rc
+            s4 += rc2 * rc2
+            sra += rc * ac
+            s2ra += rc2 * ac
         }
 
-        let mx = fitGain(cov: covRxAx, variance: varRx)
-        let my = fitGain(cov: covRyAy, variance: varRy)
-        let tX = meanAx - mx * meanRx
-        let tY = meanAy - my * meanRy
+        // Données dégénérées (tous les rx identiques) → identité.
+        guard s2 > 1.0 else {
+            return AxisFit(meanR: meanR, meanA: meanA, b1: 1, b2: 0)
+        }
 
-        return AffineParams(m00: mx, tx: tX, m11: my, ty: tY)
-    }
+        // Système 2×2 : [[s4, s3], [s3, s2]] · [b2, b1]ᵀ = [s2ra, sra]ᵀ
+        let det = s4 * s2 - s3 * s3
+        var b1: Double
+        var b2: Double
+        if abs(det) < 1.0 {
+            // Système quasi-singulier (rare) → on retombe sur le linéaire
+            // pur, c'est-à-dire b₁ = covariance / variance, b₂ = 0.
+            b2 = 0
+            b1 = sra / s2
+        } else {
+            let invDet = 1.0 / det
+            b2 = (s2 * s2ra - s3 * sra) * invDet
+            b1 = (s4 * sra - s3 * s2ra) * invDet
+        }
 
-    @inline(__always)
-    private func fitGain(cov: Double, variance: Double) -> Double {
-        // Variance insuffisante (axe dégénéré) → on garde l'identité pour
-        // que l'apply ne ramène pas tout au centre.
-        guard variance > 1.0 else { return 1.0 }
-        let raw = cov / variance
-        // Clamp sur la **magnitude** uniquement : on autorise les gains
-        // négatifs pour qu'un signe inversé (mirror sur un axe, dû à
-        // l'orientation device ou à une convention de blendShape) puisse
-        // être corrigé par la calibration. Forbidden range : |gain| ∈ (0, 0.1)
-        // — trop petit en magnitude → la régression aplatissait tout au
-        // centre, c'est exactement ce qu'on veut éviter.
-        let signed = raw < 0 ? -1.0 : 1.0
-        let mag = max(minGain, min(maxGain, abs(raw)))
-        return signed * mag
+        // Clamp magnitude de b1 (la pente au centre) avec préservation du signe :
+        // un gain trop petit collapse la sortie, un gain trop grand projette à
+        // l'infini. b2 (courbure) n'est pas borné — il est intrinsèquement
+        // petit grâce au centrage et la borne sur b1 suffit à garder l'output
+        // dans un range raisonnable.
+        let signedB1: Double = {
+            let sign = b1 < 0 ? -1.0 : 1.0
+            let mag = max(minGain, min(maxGain, abs(b1)))
+            return sign * mag
+        }()
+
+        return AxisFit(meanR: meanR, meanA: meanA, b1: signedB1, b2: b2)
     }
 }
+
 
