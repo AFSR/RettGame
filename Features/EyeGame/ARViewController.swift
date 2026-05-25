@@ -30,8 +30,11 @@ final class ARFaceViewController: UIViewController, ARSessionDelegate {
 
     /// Amplification du signal blendShape vers l'écran. Au-dessus de 1, le regard
     /// couvre tout l'écran avec une amplitude oculaire plus modeste (typique des
-    /// enfants qui ne tournent pas beaucoup les yeux).
-    private let amplification: CGFloat = 1.6
+    /// enfants qui ne tournent pas beaucoup les yeux). 2.4 → un regard à ±30 % de
+    /// l'amplitude oculaire maximale couvre déjà ~70 % de l'écran, ce qui donne
+    /// suffisamment de range au calibrateur pour apprendre une pente non
+    /// dégénérée même avec un signal modeste.
+    private let amplification: CGFloat = 2.4
 
     private var lastLogTime: CFTimeInterval = 0
 

@@ -18,6 +18,14 @@ struct GazeCalibrationView: View {
     @State private var rawGazePoint: CGPoint = .zero
     @State private var displayPoint: CGPoint = .zero
 
+    /// Moyenne mobile exponentielle du point raw, utilisée à la place du raw
+    /// instantané (très bruité) lors de l'enregistrement d'un échantillon.
+    /// α = 0.15 → constante de temps ≈ 100 ms à 60 Hz. Réduit fortement le
+    /// biais d'atténuation de la régression OLS du calibrateur.
+    @State private var emaRawPoint: CGPoint = .zero
+    @State private var emaInitialized: Bool = false
+    private let emaAlpha: CGFloat = 0.15
+
     private let normalizedPositions: [CGPoint] = [
         CGPoint(x: 0.15, y: 0.22), CGPoint(x: 0.50, y: 0.22), CGPoint(x: 0.85, y: 0.22),
         CGPoint(x: 0.15, y: 0.50), CGPoint(x: 0.50, y: 0.50), CGPoint(x: 0.85, y: 0.50),
@@ -49,6 +57,15 @@ struct GazeCalibrationView: View {
 
                 ARFaceView { point in
                     rawGazePoint = point
+                    if emaInitialized {
+                        emaRawPoint = CGPoint(
+                            x: emaAlpha * point.x + (1 - emaAlpha) * emaRawPoint.x,
+                            y: emaAlpha * point.y + (1 - emaAlpha) * emaRawPoint.y
+                        )
+                    } else {
+                        emaRawPoint = point
+                        emaInitialized = true
+                    }
                     let calibrated = calibrator.apply(point)
                     displayPoint = kalman.filter(measurement: calibrated)
                 }
@@ -145,14 +162,18 @@ struct GazeCalibrationView: View {
 
     private func handleTap() {
         let target = currentPosition(in: canvasSize)
-        guard rawGazePoint != .zero else {
+        guard emaInitialized, rawGazePoint != .zero else {
             withAnimation(.easeInOut(duration: 0.2)) { showRejectedFeedback = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
                 withAnimation(.easeInOut(duration: 0.3)) { showRejectedFeedback = false }
             }
             return
         }
-        calibrator.addSample(raw: rawGazePoint, actual: target)
+        // On utilise la moyenne mobile : un instantané a typiquement ±5–10 px
+        // de bruit, ce qui détruit la pente de régression quand le signal raw
+        // est lui-même petit (cas des enfants Rett avec amplitude oculaire
+        // modeste). Moyennée sur ~100 ms, l'entrée est nettement plus propre.
+        calibrator.addSample(raw: emaRawPoint, actual: target)
         showRejectedFeedback = false
 
         withAnimation(.easeOut(duration: 0.18)) { splashAtTarget = true }
@@ -161,6 +182,10 @@ struct GazeCalibrationView: View {
             withAnimation(.easeInOut(duration: 0.25)) {
                 currentIndex = currentIndex + 1
             }
+            // Reset EMA : la cible suivante implique un nouveau regard, on ne
+            // veut pas que le sample suivant soit contaminé par l'historique
+            // de la cible précédente.
+            emaInitialized = false
         }
     }
 }
