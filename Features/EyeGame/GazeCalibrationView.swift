@@ -16,6 +16,7 @@ struct GazeCalibrationView: View {
     private let calibrator = GazeCalibrator.shared
     @State private var kalman = GazeKalmanFilter()
     @State private var rawGazePoint: CGPoint = .zero
+    @State private var calibratedPoint: CGPoint = .zero
     @State private var displayPoint: CGPoint = .zero
 
     /// Moyenne mobile exponentielle du point raw, utilisée à la place du raw
@@ -67,12 +68,20 @@ struct GazeCalibrationView: View {
                         emaInitialized = true
                     }
                     let calibrated = calibrator.apply(point)
+                    calibratedPoint = calibrated
                     displayPoint = kalman.filter(measurement: calibrated)
                 }
                 .allowsHitTesting(false)
                 .opacity(0.001)
 
-                // Indicateur de regard (bleu) — discret, taille réduite.
+                // Overlay de diagnostic : trois points pour distinguer ce qui
+                // sort d'ARKit (rouge), ce qui sort du calibrateur (jaune) et
+                // ce que voit l'utilisateur (bleu, après Kalman). Si le point
+                // rouge ne bouge pas quand on bouge les yeux → problème ARKit.
+                // Si rouge bouge mais jaune pas → calibrateur. Si jaune bouge
+                // mais bleu très lent → Kalman trop lissant.
+                DiagnosticDot(color: .red,    diameter: 14).position(rawGazePoint).allowsHitTesting(false)
+                DiagnosticDot(color: .yellow, diameter: 14).position(calibratedPoint).allowsHitTesting(false)
                 GazeIndicator()
                     .position(displayPoint)
                     .allowsHitTesting(false)
@@ -115,6 +124,17 @@ struct GazeCalibrationView: View {
                     .padding(.top, 8)
 
                     Spacer()
+
+                    DiagnosticReadout(
+                        raw: rawGazePoint,
+                        calibrated: calibratedPoint,
+                        smoothed: displayPoint,
+                        canvas: geo.size,
+                        scaleX: calibrator.m00,
+                        scaleY: calibrator.m11
+                    )
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 8)
 
                     if showRejectedFeedback {
                         FeedbackBanner(
@@ -186,6 +206,54 @@ struct GazeCalibrationView: View {
             // veut pas que le sample suivant soit contaminé par l'historique
             // de la cible précédente.
             emaInitialized = false
+        }
+    }
+}
+
+private struct DiagnosticDot: View {
+    let color: Color
+    let diameter: CGFloat
+    var body: some View {
+        Circle()
+            .fill(color.opacity(0.85))
+            .frame(width: diameter, height: diameter)
+            .overlay(Circle().stroke(Color.white.opacity(0.8), lineWidth: 1))
+            .accessibilityHidden(true)
+    }
+}
+
+private struct DiagnosticReadout: View {
+    let raw: CGPoint
+    let calibrated: CGPoint
+    let smoothed: CGPoint
+    let canvas: CGSize
+    let scaleX: CGFloat
+    let scaleY: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            row(color: .red,    label: "raw",  pt: raw)
+            row(color: .yellow, label: "cal",  pt: calibrated)
+            row(color: .blue,   label: "out",  pt: smoothed)
+            HStack {
+                Text("canvas \(Int(canvas.width))×\(Int(canvas.height))")
+                Spacer()
+                Text(String(format: "m00=%.2f m11=%.2f", Double(scaleX), Double(scaleY)))
+            }
+            .foregroundStyle(.white.opacity(0.6))
+        }
+        .font(.system(size: 10, design: .monospaced))
+        .foregroundStyle(.white.opacity(0.85))
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .background(.ultraThinMaterial.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func row(color: Color, label: String, pt: CGPoint) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(label).foregroundStyle(.white.opacity(0.75))
+            Text(String(format: "%4d,%4d", Int(pt.x), Int(pt.y)))
+                .monospacedDigit()
         }
     }
 }
