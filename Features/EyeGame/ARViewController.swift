@@ -27,6 +27,9 @@ final class ARFaceViewController: UIViewController, ARSessionDelegate {
 
     let arSession = ARSession()
     var onGazeUpdate: ((CGPoint) -> Void)?
+    /// Callback optionnel exposant les valeurs intermédiaires des blendShapes
+    /// (h, v ∈ [-1, 1]) pour les écrans qui veulent les afficher en diagnostic.
+    var onGazeDiagnostic: ((_ h: CGFloat, _ v: CGFloat) -> Void)?
 
     /// Amplification du signal blendShape vers l'écran. Au-dessus de 1, le regard
     /// couvre tout l'écran avec une amplitude oculaire plus modeste (typique des
@@ -100,6 +103,7 @@ final class ARFaceViewController: UIViewController, ARSessionDelegate {
 
         DispatchQueue.main.async { [weak self] in
             self?.onGazeUpdate?(screenPoint)
+            self?.onGazeDiagnostic?(horizontal, vertical)
         }
     }
 
@@ -153,14 +157,17 @@ final class ARFaceViewController: UIViewController, ARSessionDelegate {
 /// Représentable SwiftUI pour le tracking facial.
 struct ARFaceView: UIViewControllerRepresentable {
     let onGazeUpdate: (CGPoint) -> Void
+    var onGazeDiagnostic: ((CGFloat, CGFloat) -> Void)? = nil
 
     func makeUIViewController(context: Context) -> ARFaceViewController {
         let vc = ARFaceViewController()
         vc.onGazeUpdate = onGazeUpdate
+        vc.onGazeDiagnostic = onGazeDiagnostic
         return vc
     }
 
     func updateUIViewController(_ vc: ARFaceViewController, context: Context) {
         vc.onGazeUpdate = onGazeUpdate
+        vc.onGazeDiagnostic = onGazeDiagnostic
     }
 }

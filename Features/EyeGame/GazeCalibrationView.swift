@@ -27,6 +27,11 @@ struct GazeCalibrationView: View {
     @State private var emaInitialized: Bool = false
     private let emaAlpha: CGFloat = 0.15
 
+    /// Valeurs brutes h, v ∈ [-1, 1] sorties d'ARKit avant tout mapping écran.
+    /// Affichées dans le readout de diagnostic.
+    @State private var blendH: CGFloat = 0
+    @State private var blendV: CGFloat = 0
+
     private let normalizedPositions: [CGPoint] = [
         CGPoint(x: 0.15, y: 0.22), CGPoint(x: 0.50, y: 0.22), CGPoint(x: 0.85, y: 0.22),
         CGPoint(x: 0.15, y: 0.50), CGPoint(x: 0.50, y: 0.50), CGPoint(x: 0.85, y: 0.50),
@@ -56,21 +61,27 @@ struct GazeCalibrationView: View {
                 )
                 .ignoresSafeArea()
 
-                ARFaceView { point in
-                    rawGazePoint = point
-                    if emaInitialized {
-                        emaRawPoint = CGPoint(
-                            x: emaAlpha * point.x + (1 - emaAlpha) * emaRawPoint.x,
-                            y: emaAlpha * point.y + (1 - emaAlpha) * emaRawPoint.y
-                        )
-                    } else {
-                        emaRawPoint = point
-                        emaInitialized = true
+                ARFaceView(
+                    onGazeUpdate: { point in
+                        rawGazePoint = point
+                        if emaInitialized {
+                            emaRawPoint = CGPoint(
+                                x: emaAlpha * point.x + (1 - emaAlpha) * emaRawPoint.x,
+                                y: emaAlpha * point.y + (1 - emaAlpha) * emaRawPoint.y
+                            )
+                        } else {
+                            emaRawPoint = point
+                            emaInitialized = true
+                        }
+                        let calibrated = calibrator.apply(point)
+                        calibratedPoint = calibrated
+                        displayPoint = kalman.filter(measurement: calibrated)
+                    },
+                    onGazeDiagnostic: { h, v in
+                        blendH = h
+                        blendV = v
                     }
-                    let calibrated = calibrator.apply(point)
-                    calibratedPoint = calibrated
-                    displayPoint = kalman.filter(measurement: calibrated)
-                }
+                )
                 .allowsHitTesting(false)
                 .opacity(0.001)
 
@@ -131,7 +142,9 @@ struct GazeCalibrationView: View {
                         smoothed: displayPoint,
                         canvas: geo.size,
                         scaleX: calibrator.m00,
-                        scaleY: calibrator.m11
+                        scaleY: calibrator.m11,
+                        blendH: blendH,
+                        blendV: blendV
                     )
                     .padding(.horizontal, 24)
                     .padding(.bottom, 8)
@@ -229,9 +242,16 @@ private struct DiagnosticReadout: View {
     let canvas: CGSize
     let scaleX: CGFloat
     let scaleY: CGFloat
+    let blendH: CGFloat
+    let blendV: CGFloat
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(String(format: "blend h=%+.3f v=%+.3f", Double(blendH), Double(blendV)))
+                Spacer()
+            }
+            .foregroundStyle(.white.opacity(0.85))
             row(color: .red,    label: "raw",  pt: raw)
             row(color: .yellow, label: "cal",  pt: calibrated)
             row(color: .blue,   label: "out",  pt: smoothed)
