@@ -123,35 +123,26 @@ final class ARFaceViewController: UIViewController, ARSessionDelegate {
         }
     }
 
-    /// Convertit (horizontal, vertical) ∈ [-1, 1] en CGPoint écran selon l'orientation.
-    /// Les blendShapes sont dans le repère du visage : "horizontal" = utilisateur regarde
-    /// à sa droite. Quand le device est tourné, on doit re-mapper vers les axes écran.
+    /// Convertit `(horizontal, vertical)` ∈ [-1, 1] en `CGPoint` écran.
+    ///
+    /// **Indépendant de l'orientation device.** Les 8 blendShapes oculaires
+    /// d'ARKit sont en repère **face/utilisateur** : `eyeLookOutRight`
+    /// signifie "le pupille droite regarde vers la droite de l'utilisateur",
+    /// peu importe comment le device est tenu. Comme iOS rétablit déjà
+    /// l'image à l'endroit pour l'utilisateur (le contenu rendu en
+    /// landscape est physiquement orienté pour qu'il le voie droit), le
+    /// mapping userRight → screenRight reste vrai dans toutes les
+    /// orientations. On ne switche plus selon l'interface — le précédent
+    /// switch était bâti sur l'hypothèse erronée que les blendShapes sont
+    /// en repère caméra.
     private func mapToScreen(horizontal: CGFloat, vertical: CGFloat,
                              bounds: CGRect, orientation: UIInterfaceOrientation) -> CGPoint {
         let h = horizontal * amplification
         let v = vertical   * amplification
 
-        // Calcule les coordonnées normalisées dans le repère du visage de l'utilisateur :
-        //   userX ∈ [-1, +1] (droite = +1)
-        //   userY ∈ [-1, +1] (haut  = +1)
-        // puis transforme selon l'orientation.
-        let nx, ny: CGFloat
-        switch orientation {
-        case .portraitUpsideDown:
-            nx = -h; ny = v   // X et Y inversés en up-side-down
-        case .landscapeLeft:
-            // device tourné de 90° vers la gauche depuis portrait
-            // user "right" (h+) → screen "down" (y+)
-            // user "up"    (v+) → screen "right" (x+)
-            nx = v;  ny = h
-        case .landscapeRight:
-            // device tourné de 90° vers la droite
-            // user "right" (h+) → screen "up" (y-)
-            // user "up"    (v+) → screen "left" (x-)
-            nx = -v; ny = -h
-        default: // portrait
-            nx = h;  ny = -v
-        }
+        // userRight → screenRight, userUp → screenUp (= y faible côté iOS).
+        let nx = h
+        let ny = -v
 
         let x = (nx * 0.5 + 0.5) * bounds.width
         let y = (ny * 0.5 + 0.5) * bounds.height

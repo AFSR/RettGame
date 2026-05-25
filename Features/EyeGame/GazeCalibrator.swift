@@ -201,9 +201,15 @@ final class GazeCalibrator {
         // que l'apply ne ramène pas tout au centre.
         guard variance > 1.0 else { return 1.0 }
         let raw = cov / variance
-        // Clamp dans une plage raisonnable : aucun gain physique légitime
-        // ne dépasse 20× ou n'est inférieur à 0.1× sur cet équipement.
-        return max(minGain, min(maxGain, raw))
+        // Clamp sur la **magnitude** uniquement : on autorise les gains
+        // négatifs pour qu'un signe inversé (mirror sur un axe, dû à
+        // l'orientation device ou à une convention de blendShape) puisse
+        // être corrigé par la calibration. Forbidden range : |gain| ∈ (0, 0.1)
+        // — trop petit en magnitude → la régression aplatissait tout au
+        // centre, c'est exactement ce qu'on veut éviter.
+        let signed = raw < 0 ? -1.0 : 1.0
+        let mag = max(minGain, min(maxGain, abs(raw)))
+        return signed * mag
     }
 }
 
