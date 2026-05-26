@@ -248,7 +248,7 @@ private struct DiagnosticReadout: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text(String(format: "blend h=%+.3f v=%+.3f", Double(blendH), Double(blendV)))
+                Text(String(format: "gaze angle h=%+.1f° v=%+.1f°", Double(blendH), Double(blendV)))
                 Spacer()
             }
             .foregroundStyle(.white.opacity(0.85))
@@ -258,7 +258,7 @@ private struct DiagnosticReadout: View {
             HStack {
                 Text("canvas \(Int(canvas.width))×\(Int(canvas.height))")
                 Spacer()
-                Text(String(format: "m00=%.2f m11=%.2f", Double(scaleX), Double(scaleY)))
+                Text(String(format: "gain x=%.2f y=%.2f", Double(scaleX), Double(scaleY)))
             }
             .foregroundStyle(.white.opacity(0.6))
         }

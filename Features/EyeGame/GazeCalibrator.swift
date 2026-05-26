@@ -45,9 +45,11 @@ final class GazeCalibrator {
 
     private var samples: [Sample] = []
     private let maxSamples: Int
-    /// Format raw/actual inchangé depuis v3 → on garde la clé pour ne pas
-    /// effacer les calibrations existantes des utilisateurs.
-    private let persistenceKey = "afsr.eyegame.calibration.samples.v3"
+    /// Bump v3 → v4 : la sortie d'ARFaceViewController est passée des
+    /// blendShapes saturés à un lancer de rayon 3D. Les anciens samples
+    /// (en pixels dérivés de h/v) n'ont plus de sens dans le nouveau
+    /// espace de raw (pixels dérivés du hit point géométrique).
+    private let persistenceKey = "afsr.eyegame.calibration.samples.v4"
 
     /// Paramètres ajustés par axe.
     private struct AxisFit {
