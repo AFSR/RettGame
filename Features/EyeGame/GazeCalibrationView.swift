@@ -248,7 +248,13 @@ private struct DiagnosticReadout: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text(String(format: "gaze angle h=%+.1f° v=%+.1f°", Double(blendH), Double(blendV)))
+                // Affiche les valeurs brutes de face.lookAtPoint en mm pour
+                // qu'on voie directement si ARKit fournit du signal sur
+                // l'axe horizontal. Bouger les yeux gauche/droite DOIT
+                // faire varier la valeur x ; si elle reste à zéro c'est
+                // ARKit qui ne capte pas ce signal.
+                Text(String(format: "lookAt x=%+6.1f y=%+6.1f mm",
+                            Double(blendH) * 1000, Double(blendV) * 1000))
                 Spacer()
             }
             .foregroundStyle(.white.opacity(0.85))
