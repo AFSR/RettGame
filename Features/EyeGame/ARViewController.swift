@@ -77,47 +77,47 @@ final class ARFaceViewController: UIViewController, ARSessionDelegate {
               let cameraTransform = session.currentFrame?.camera.transform
         else { return }
 
-        // Transformation face-local → device-local (= caméra-local).
-        // Combine la pose de la tête + le déplacement éventuel du device,
-        // pour que le plan z = 0 corresponde toujours à l'écran.
         let faceToDevice = cameraTransform.inverse * face.transform
 
-        // Positions des yeux et point de convergence en repère face. C'est
-        // `lookAtPoint` qui porte l'info de rotation du regard ; les eye
-        // transforms ne donnent que la position des globes.
         let leftEyePosFace  = simd_make_float3(face.leftEyeTransform.columns.3)
         let rightEyePosFace = simd_make_float3(face.rightEyeTransform.columns.3)
         let lookAtFace      = face.lookAtPoint
 
-        // Direction de regard pour chaque œil = (œil → convergence) en repère
-        // face, puis transportée en repère device. Le w = 0 traite ces vecteurs
-        // comme des directions (pas affectés par la translation).
         let leftDirFace  = simd_normalize(lookAtFace - leftEyePosFace)
         let rightDirFace = simd_normalize(lookAtFace - rightEyePosFace)
         let leftDir  = simd_make_float3(faceToDevice * simd_float4(leftDirFace,  0))
         let rightDir = simd_make_float3(faceToDevice * simd_float4(rightDirFace, 0))
 
-        // Positions des yeux en repère device.
         let leftPos  = simd_make_float3((faceToDevice * face.leftEyeTransform).columns.3)
         let rightPos = simd_make_float3((faceToDevice * face.rightEyeTransform).columns.3)
 
-        guard let leftHit  = intersectScreenPlane(origin: leftPos,  direction: leftDir),
-              let rightHit = intersectScreenPlane(origin: rightPos, direction: rightDir)
-        else { return }
+        // Tente le lancer de rayon par œil. Si l'un ou les deux échouent
+        // (rayon quasi-parallèle à l'écran, signe inattendu, etc.), on
+        // retombe sur la projection directe de `lookAtPoint` sur le plan
+        // z = 0 — moins précis mais robuste et géométriquement défini quoi
+        // qu'il arrive.
+        let leftHit  = intersectScreenPlane(origin: leftPos,  direction: leftDir)
+        let rightHit = intersectScreenPlane(origin: rightPos, direction: rightDir)
 
-        let avgHit = (leftHit + rightHit) * 0.5
+        let avgHit: simd_float2
+        if let lh = leftHit, let rh = rightHit {
+            avgHit = (lh + rh) * 0.5
+        } else if let lh = leftHit {
+            avgHit = lh
+        } else if let rh = rightHit {
+            avgHit = rh
+        } else {
+            // Fallback : projection directe du point de convergence sur
+            // l'écran. Suppose que l'utilisateur regarde sur l'écran.
+            let lookAtDevice = simd_make_float3(faceToDevice * simd_float4(lookAtFace, 1))
+            avgHit = simd_float2(lookAtDevice.x, lookAtDevice.y)
+        }
 
-        // Conversion mètres (repère caméra) → pixels logiques (repère UI).
-        // - Caméra à l'origine, +Y vers le haut du device, +X vers la droite.
-        // - Écran : x ∈ [-w/2, +w/2], y ∈ [-h, 0]. En portrait la caméra est
-        //   au-dessus de l'écran donc y=0 = haut, y<0 = bas.
-        // - Repère UI : (0, 0) en haut-gauche, x → droite, y → bas.
         let bounds = UIScreen.main.bounds
         let screenX = bounds.width * 0.5 + CGFloat(avgHit.x * pixelsPerMeter)
         let screenY = CGFloat(-avgHit.y * pixelsPerMeter)
         let screenPoint = CGPoint(x: screenX, y: screenY)
 
-        // Angles diagnostic : direction moyenne du regard, projetée en h, v.
         let avgDir = simd_normalize((leftDir + rightDir) * 0.5)
         let absZ = max(0.001, abs(avgDir.z))
         let hDeg = CGFloat(atan2(avgDir.x, absZ) * 180 / .pi)
@@ -126,8 +126,9 @@ final class ARFaceViewController: UIViewController, ARSessionDelegate {
         let now = CACurrentMediaTime()
         if now - lastLogTime > 2.0 {
             lastLogTime = now
+            let usedFallback = (leftHit == nil && rightHit == nil)
             Self.log.info(
-                "gaze hit=\(avgHit.x, format: .fixed(precision: 3)),\(avgHit.y, format: .fixed(precision: 3))m angle=\(hDeg, format: .fixed(precision: 1)),\(vDeg, format: .fixed(precision: 1))° → screen \(Int(screenX))/\(Int(screenY))"
+                "gaze \(usedFallback ? "FALLBACK" : "rays") hit=\(avgHit.x, format: .fixed(precision: 3)),\(avgHit.y, format: .fixed(precision: 3))m dir=(\(avgDir.x, format: .fixed(precision: 2)),\(avgDir.y, format: .fixed(precision: 2)),\(avgDir.z, format: .fixed(precision: 2))) angle=\(hDeg, format: .fixed(precision: 1)),\(vDeg, format: .fixed(precision: 1))° leftPos.z=\(leftPos.z, format: .fixed(precision: 2)) → screen \(Int(screenX))/\(Int(screenY))"
             )
         }
 
@@ -137,12 +138,14 @@ final class ARFaceViewController: UIViewController, ARSessionDelegate {
         }
     }
 
-    /// Intersection d'un rayon `(origin, direction)` avec le plan z = 0
-    /// dans le repère local du device (= la surface de l'écran).
+    /// Intersection rayon-plan avec z = 0. Tolère un Z très petit dans la
+    /// direction (on ne rejette que les rayons strictement parallèles au
+    /// plan) — un signe inattendu donne quand même un point d'intersection
+    /// géométriquement défini, et c'est mieux que de ne rien envoyer du tout.
     @inline(__always)
     private func intersectScreenPlane(origin: simd_float3,
                                       direction: simd_float3) -> simd_float2? {
-        guard direction.z < -0.01 else { return nil }
+        guard abs(direction.z) > 0.001 else { return nil }
         let t = -origin.z / direction.z
         let hit = origin + t * direction
         return simd_float2(hit.x, hit.y)
