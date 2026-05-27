@@ -43,15 +43,25 @@ final class ARFaceViewController: UIViewController, ARSessionDelegate {
     /// axe (= UI horizontal en portrait).
     var onGazeDiagnostic: ((_ camX: CGFloat, _ camY: CGFloat) -> Void)?
 
-    /// Dimensions physiques de l'écran en mètres, par modèle. Valeurs reprises
-    /// d'EyeTrackKit pour iPhone 11/11 Pro/iPad. À défaut, fallback iPhone 14.
+    /// Dimensions physiques approximatives de l'écran, calculées dynamiquement
+    /// depuis l'idiom du device. Le calibrateur en aval absorbe les ±10 %
+    /// de variation entre modèles dans la même famille — on n'a pas besoin
+    /// d'une base de données device-par-device, juste d'une bonne baseline.
+    private var screen: ScreenSpec {
+        let bounds = UIScreen.main.bounds
+        // Points logiques par mètre, calé empiriquement :
+        // - iPhones modernes : 390 pts / 0.0715 m ≈ 5455 pts/m
+        // - iPads : 1024 pts / 0.215 m ≈ 4760 pts/m
+        let pointsPerMeter: Float = UIDevice.current.userInterfaceIdiom == .pad ? 4760 : 5455
+        return ScreenSpec(
+            widthM:  Float(bounds.width)  / pointsPerMeter,
+            heightM: Float(bounds.height) / pointsPerMeter
+        )
+    }
+
     private struct ScreenSpec {
         let widthM: Float
         let heightM: Float
-    }
-    private var screen: ScreenSpec {
-        // En portrait (taille pour les iPhones modernes ~ iPhone 14)
-        ScreenSpec(widthM: 0.0715, heightM: 0.1467)
     }
 
     private var lastLogTime: CFTimeInterval = 0

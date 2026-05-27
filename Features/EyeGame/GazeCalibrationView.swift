@@ -21,11 +21,13 @@ struct GazeCalibrationView: View {
 
     /// Moyenne mobile exponentielle du point raw, utilisée à la place du raw
     /// instantané (très bruité) lors de l'enregistrement d'un échantillon.
-    /// α = 0.15 → constante de temps ≈ 100 ms à 60 Hz. Réduit fortement le
-    /// biais d'atténuation de la régression OLS du calibrateur.
+    /// α = 0.10 → constante de temps ≈ 150 ms à 60 Hz. Plus de moyennage
+    /// que ce qu'on avait précédemment (0.15 ≈ 100 ms) → samples de
+    /// calibration plus propres → fit quadratique plus précis. Le tap reste
+    /// instantané côté UX, c'est juste l'historique court qui est plus lissé.
     @State private var emaRawPoint: CGPoint = .zero
     @State private var emaInitialized: Bool = false
-    private let emaAlpha: CGFloat = 0.15
+    private let emaAlpha: CGFloat = 0.10
 
     /// Valeurs brutes h, v ∈ [-1, 1] sorties d'ARKit avant tout mapping écran.
     /// Affichées dans le readout de diagnostic.
@@ -162,6 +164,16 @@ struct GazeCalibrationView: View {
                     }
 
                     if calibrator.samplesCount >= minimumSamples {
+                        // Le fit quadratique par axe gagne significativement
+                        // en précision entre 9 et ~18-25 samples. On le
+                        // signale tant qu'on est sous 18 pour que le parent
+                        // sache que continuer améliore la cible.
+                        if calibrator.samplesCount < 18 {
+                            Text("Continuez : précision améliorée jusqu'à ~18 points")
+                                .font(AFSRFont.caption(11))
+                                .foregroundStyle(.white.opacity(0.55))
+                                .padding(.bottom, 4)
+                        }
                         Button {
                             dismiss()
                         } label: {
