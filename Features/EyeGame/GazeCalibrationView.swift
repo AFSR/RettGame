@@ -248,12 +248,11 @@ private struct DiagnosticReadout: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
-                // Affiche les valeurs brutes de face.lookAtPoint en mm pour
-                // qu'on voie directement si ARKit fournit du signal sur
-                // l'axe horizontal. Bouger les yeux gauche/droite DOIT
-                // faire varier la valeur x ; si elle reste à zéro c'est
-                // ARKit qui ne capte pas ce signal.
-                Text(String(format: "lookAt x=%+6.1f y=%+6.1f mm",
+                // `blendH` / `blendV` portent ici lookAtCam.x et .y (en mètres),
+                // i.e. la position du regard sur le plan de la caméra. La
+                // valeur **x** correspond à l'axe long du device (vertical UI
+                // en portrait), la **y** au court (horizontal UI).
+                Text(String(format: "lookAtCam x=%+6.1f y=%+6.1f mm (x=vert, y=horiz UI)",
                             Double(blendH) * 1000, Double(blendV) * 1000))
                 Spacer()
             }
