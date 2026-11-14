@@ -135,7 +135,7 @@ final class BubblesGameViewModel {
 
     init() {
         applyStoredFilterSettings()
-        kalman.setCalibrationConfidence(sampleCount: calibrator.samplesCount)
+        calibrator.tune(kalman)
     }
 
     deinit {
@@ -157,10 +157,10 @@ final class BubblesGameViewModel {
     }
 
     @discardableResult
-    private func recordCalibrationSample(actual: CGPoint) -> Bool {
+    private func recordCalibrationSample(actual: CGPoint, selfLabelled: Bool = false) -> Bool {
         guard rawGazePoint != .zero else { return false }
-        calibrator.addSample(target: actual)
-        kalman.setCalibrationConfidence(sampleCount: calibrator.samplesCount)
+        calibrator.addSample(target: actual, selfLabelled: selfLabelled)
+        calibrator.tune(kalman)
         return true
     }
 
@@ -184,8 +184,9 @@ final class BubblesGameViewModel {
         bubbles = []
         processor.reset()
         kalman.reset()
-        kalman.setCalibrationConfidence(sampleCount: calibrator.samplesCount)
+        calibrator.tune(kalman)
         processor.dwellDuration = speed.dwellDuration
+        processor.targetRadius = calibrator.recommendedDwellRadius
         timeRemaining = duration.seconds
         endDate = Date().addingTimeInterval(duration.seconds)
         state = .playing
@@ -222,7 +223,7 @@ final class BubblesGameViewModel {
         }
         if let hitId = processor.update(gazePoint: smoothed, targets: targets),
            let bubble = bubbles.first(where: { $0.id == hitId }) {
-            recordCalibrationSample(actual: bubble.position)
+            recordCalibrationSample(actual: bubble.position, selfLabelled: true)
             popBubble(id: hitId)
         }
     }

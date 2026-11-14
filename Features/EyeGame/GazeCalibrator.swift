@@ -1,218 +1,293 @@
 import Foundation
 import CoreGraphics
 import Observation
+import UIKit
 
-/// Calibrateur du regard — **version MLP personnalisé**.
+/// Calibrateur du regard : régression ridge personnalisée (`GazeRidgeModel`).
 ///
-/// Remplace la régression quadratique par un petit réseau de neurones
-/// (`GazeMLP`, 2 couches cachées de 16 et 8 neurones, ReLU, sortie
-/// linéaire) entraîné sur les samples de calibration de l'utilisateur
-/// courant. Prend en entrée un vecteur de 9 features au lieu de juste
-/// les coordonnées ARKit — intégrer la pose de la tête, la position de
-/// la pupille Vision, et les blinks donne au modèle beaucoup plus
-/// d'informations pour apprendre le mapping personnel à cet enfant.
+/// **Features** (poussées à chaque frame par `ARFaceViewController`) :
+///   0, 1 : impact du rayon œil → point de fixation sur le plan de l'écran, repère caméra (m)
+///   2, 3 : indices horizontal / vertical dérivés des blendShapes oculaires ARKit
+/// Deux estimateurs indépendants du même regard : la régression apprend à les combiner.
+/// Aucune convention d'axe ou de signe n'est codée en dur (permutation portrait/paysage,
+/// miroir…) : le modèle linéaire complet les absorbe, y compris sur iPad.
 ///
-/// **Pipeline runtime** :
-/// 1. `ARFaceViewController` calcule les 9 features à chaque frame et
-///    appelle `updateFeatures(...)`.
-/// 2. Les game VMs appellent `apply(_ raw:)` (API inchangée pour la
-///    compat). Le paramètre `raw` est ignoré : le MLP fait son
-///    inférence sur le vecteur de features caché.
-/// 3. Si aucun modèle n'a encore été entraîné (< 9 samples), `apply`
-///    retourne `raw` — fallback vers la pipeline ARKit directe.
+/// **Coordonnées** : tout est exprimé dans la fenêtre, normalisé par sa taille. Les vues de
+/// jeu et de calibration occupent donc tout l'écran (origine 0,0) pour que position de la
+/// cible, position du regard et samples partagent le même repère.
 ///
-/// **Pipeline calibration** :
-/// 1. Chaque frame met à jour une EMA (α=0.10) des features pour
-///    lisser le bruit instantané.
-/// 2. Le tap du parent appelle `addSample(target:)` qui enregistre
-///    `(features EMA, position cible)`.
-/// 3. L'entraînement du MLP est relancé en arrière-plan (background
-///    queue) à chaque nouveau sample ≥ 9 : 500 epochs max, early stop
-///    à MSE < 0.0005, L2 regularization.
+/// **Orientation** : les samples sont liés à l'orientation de l'interface où ils ont été
+/// pris. Calibrer dans une autre orientation repart de zéro ; tant que ça n'est pas fait,
+/// `samplesCount` vaut 0 et `apply` renvoie le point brut.
 ///
-/// **Persistance** : seuls les samples sont sauvegardés en
-/// `UserDefaults`. Le modèle est ré-entraîné à chaque lancement de
-/// l'app depuis les samples persistés — garantit la compatibilité
-/// future si l'architecture du MLP change.
+/// **Capture d'un sample** : moyenne mobile exponentielle des features (≈ 150 ms), pour ne
+/// pas enregistrer le bruit image par image.
 @Observable
 final class GazeCalibrator {
     static let shared = GazeCalibrator()
 
-    /// Nombre fixe de features attendues. Doit matcher ce qu'envoie
-    /// `ARFaceViewController.updateFeatures(_:)`.
-    static let featureCount = 9
+    static let featureCount = 4
+    static let minimumSamples = 9
+
+    private static let lambdaPerSample = 0.05
+    private static let emaAlpha = 0.10
 
     struct Sample: Codable, Equatable {
-        let features: [Double]  // 9 valeurs
-        let target: [Double]    // 2 valeurs (x, y normalisées ∈ [0, 1])
+        let features: [Double]
+        /// Position visée, normalisée dans la fenêtre : [0, 1] × [0, 1].
+        let target: [Double]
+        /// Pris pendant une partie sur un dwell réussi : la cible était déjà là où le modèle
+        /// pointait, donc ce sample ne mesure pas l'erreur réelle (voir `makeReport`).
+        var selfLabelled = false
+    }
+
+    /// Qualité de l'ajustement, en pixels : erreur RMS en validation croisée leave-one-out
+    /// (l'erreur sur un point que le modèle n'a pas vu) et part de variance expliquée.
+    /// `sampleCount` = samples retenus après rejet des taps aberrants.
+    struct FitReport: Equatable {
+        var sampleCount = 0
+        var looX = 0.0, looY = 0.0
+        var looR2X = 0.0, looR2Y = 0.0
+        var typicalError: Double { (looX * looX + looY * looY).squareRoot() }
+    }
+
+    private struct Store: Codable {
+        var orientation: Int
+        var samples: [Sample]
     }
 
     private var samples: [Sample] = []
+    private var sampleOrientation = 0
     private let maxSamples: Int
-    /// Bump v4 → v5 : format storage changé (features vecteur 9D au lieu
-    /// du couple raw/actual en pixels).
-    private let persistenceKey = "afsr.eyegame.calibration.v5"
+    private let persistenceKey = "afsr.eyegame.calibration.v6"
 
-    // Thread-safety : `mlp` est écrit en background (training), lu en
-    // main thread (inférence).
-    private let lock = NSLock()
-    private var mlp: GazeMLP?
+    private(set) var isTrained = false
+    private(set) var report = FitReport()
 
-    // Features courantes, mises à jour à 60 Hz depuis le main thread.
-    private var _latestFeatures: [Double] = Array(repeating: 0, count: featureCount)
-    private var _canvasSize: CGSize = CGSize(width: 1, height: 1)
-
-    // EMA des features pour l'enregistrement des samples (plus propre
-    // qu'un instantané bruité).
-    private var _emaFeatures: [Double] = Array(repeating: 0, count: featureCount)
-    private var _emaInitialized = false
-    private let emaAlpha: Double = 0.10
-
-    private var _isTrained: Bool = false
-    private var _trainingLoss: Double = 0
-    private var _isTraining: Bool = false
-
-    // MARK: - API publique
-
-    var samplesCount: Int { samples.count }
-    /// `true` quand un modèle entraîné est disponible et utilisé.
-    var isTrained: Bool { _isTrained }
-    /// Dernière MSE de training (normalisée [0, 1] par axe).
-    var trainingLoss: Double { _trainingLoss }
-    /// `true` pendant qu'un training est en cours sur la background queue.
-    var isTraining: Bool { _isTraining }
-    /// Compat diagnostic : "gain x/y" n'a plus de sens en MLP, on
-    /// affiche une valeur indicative (0 = pas de modèle, 1 = modèle prêt).
-    var m00: CGFloat { _isTrained ? 1 : 0 }
-    var m11: CGFloat { _isTrained ? 1 : 0 }
+    // Chemin chaud (60 Hz) : jamais lu par une vue, donc exclu de l'observation.
+    @ObservationIgnored private var model: GazeRidgeModel?
+    @ObservationIgnored private var latestFeatures = [Double](repeating: 0, count: GazeCalibrator.featureCount)
+    @ObservationIgnored private var emaFeatures = [Double](repeating: 0, count: GazeCalibrator.featureCount)
+    @ObservationIgnored private var emaReady = false
+    @ObservationIgnored private var canvasSize = UIScreen.main.bounds.size
+    @ObservationIgnored private var currentOrientation = GazeCalibrator.interfaceOrientation()
+    @ObservationIgnored private var samplesSinceReport = 0
 
     init(maxSamples: Int = 200) {
         self.maxSamples = maxSamples
         load()
-        if samples.count >= 9 {
-            scheduleTraining()
-        }
+        refit()
     }
 
-    // MARK: - Features update (60 Hz)
+    // MARK: - État
 
-    /// Appelé par `ARFaceViewController` à chaque frame avec le vecteur de
-    /// features et la taille du canvas courant. Met à jour aussi l'EMA.
-    func updateFeatures(_ features: [Double], canvasSize: CGSize) {
-        guard features.count == Self.featureCount else { return }
-        _latestFeatures = features
-        _canvasSize = canvasSize
+    /// Samples valables pour l'orientation actuelle de l'interface.
+    var samplesCount: Int {
+        let count = samples.count
+        return sampleOrientation == Self.interfaceOrientation() ? count : 0
+    }
 
-        if _emaInitialized {
+    /// Rayon de dwell conseillé : plus la calibration est imprécise, plus on accepte large.
+    /// 1,3 × l'erreur typique couvre environ 80 % des mesures autour d'une fixation.
+    var recommendedDwellRadius: CGFloat {
+        max(80, min(220, CGFloat(report.typicalError) * 1.3))
+    }
+
+    static func interfaceOrientation() -> Int {
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first
+        return (scene?.interfaceOrientation ?? .portrait).rawValue
+    }
+
+    // MARK: - Features (60 Hz)
+
+    func updateFeatures(_ features: [Double], canvasSize: CGSize, orientation: Int) {
+        guard features.count == Self.featureCount, canvasSize.width > 1, canvasSize.height > 1 else { return }
+        latestFeatures = features
+        self.canvasSize = canvasSize
+        currentOrientation = orientation
+        if emaReady {
             for i in 0..<features.count {
-                _emaFeatures[i] = emaAlpha * features[i] + (1 - emaAlpha) * _emaFeatures[i]
+                emaFeatures[i] += Self.emaAlpha * (features[i] - emaFeatures[i])
             }
         } else {
-            _emaFeatures = features
-            _emaInitialized = true
+            emaFeatures = features
+            emaReady = true
         }
     }
 
-    /// Reset l'EMA — à appeler entre cibles de calibration pour que le
-    /// sample N+1 ne soit pas contaminé par l'historique de la cible N.
+    /// À appeler quand la cible change : la moyenne repart de la mesure courante, sans
+    /// l'historique de la cible précédente. Reste prête à enregistrer immédiatement.
     func resetEMA() {
-        _emaInitialized = false
+        if emaReady { emaFeatures = latestFeatures }
     }
 
-    // MARK: - Inférence (appelée par les game VMs)
+    /// Règle le filtre de Kalman d'un jeu sur la qualité réelle de la calibration : le bruit de
+    /// mesure supposé suit l'erreur mesurée (au moins 8 px), pas seulement le nombre de samples.
+    func tune(_ kalman: GazeKalmanFilter) {
+        kalman.setCalibrationConfidence(sampleCount: samplesCount)
+        kalman.measurementSigmaFloor = max(8, report.typicalError * 0.5)
+    }
 
-    /// Retourne la position écran prédite par le MLP à partir du vecteur
-    /// de features courant. Le paramètre `raw` est gardé pour la
-    /// rétrocompat de l'API mais n'est utilisé que comme fallback tant
-    /// qu'aucun modèle n'est entraîné.
+    // MARK: - Inférence
+
+    /// Position prédite dans la fenêtre. `raw` n'est qu'un repli tant qu'aucun modèle n'est
+    /// entraîné pour l'orientation courante.
     func apply(_ raw: CGPoint) -> CGPoint {
-        lock.lock()
-        let model = mlp
-        lock.unlock()
-        guard let model else { return raw }
-
-        let pred = model.predict(_latestFeatures)
-        let w = _canvasSize.width
-        let h = _canvasSize.height
-        return CGPoint(
-            x: CGFloat(pred[0]) * w,
-            y: CGFloat(pred[1]) * h
-        )
+        guard let model, currentOrientation == sampleOrientation else { return raw }
+        let p = model.predict(latestFeatures)
+        return CGPoint(x: min(max(p[0], -0.1), 1.1) * canvasSize.width,
+                       y: min(max(p[1], -0.1), 1.1) * canvasSize.height)
     }
 
-    // MARK: - Calibration (appelée par la GazeCalibrationView)
+    // MARK: - Calibration
 
-    /// Enregistre un sample en utilisant les features EMA actuelles et
-    /// la position écran de la cible (normalisée par le canvas).
-    func addSample(target: CGPoint) {
-        guard _emaInitialized else { return }
-        let normTarget = [
-            Double(target.x / _canvasSize.width),
-            Double(target.y / _canvasSize.height)
-        ]
-        samples.append(Sample(features: _emaFeatures, target: normTarget))
-        if samples.count > maxSamples {
-            samples.removeFirst(samples.count - maxSamples)
+    /// Enregistre `(features lissées, position de la cible)`. `target` est en coordonnées de
+    /// fenêtre. Retourne false si ARKit n'a pas encore fourni de mesure.
+    @discardableResult
+    func addSample(target: CGPoint, selfLabelled: Bool = false) -> Bool {
+        guard emaReady else { return false }
+        if sampleOrientation != currentOrientation {
+            samples.removeAll()
+            sampleOrientation = currentOrientation
         }
+        samples.append(Sample(
+            features: emaFeatures,
+            target: [Double(target.x / canvasSize.width), Double(target.y / canvasSize.height)],
+            selfLabelled: selfLabelled
+        ))
+        // Au-delà du plafond on évince d'abord les samples auto-étiquetés : la calibration
+        // guidée ne doit pas disparaître au profit de samples de jeu.
+        while samples.count > maxSamples {
+            if let i = samples.firstIndex(where: { $0.selfLabelled }) {
+                samples.remove(at: i)
+            } else {
+                samples.removeFirst()
+            }
+        }
+        samplesSinceReport += 1
+        refit()
         save()
-
-        if samples.count >= 9 {
-            scheduleTraining()
-        }
+        return true
     }
 
     func reset() {
         samples.removeAll()
-        lock.lock()
-        mlp = nil
-        lock.unlock()
-        _isTrained = false
-        _trainingLoss = 0
+        model = nil
+        isTrained = false
+        report = FitReport()
         save()
     }
 
-    // MARK: - Training (background)
+    // MARK: - Ajustement
 
-    private func scheduleTraining() {
-        // Snapshot des samples pour entraîner sans tenir de lock côté main.
-        let batch = samples.map { (x: $0.features, y: $0.target) }
-        _isTraining = true
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
-            var model = GazeMLP(inputSize: Self.featureCount, outputSize: 2)
-            let lr = 0.05
-            let l2 = 0.001
-            let maxEpochs = 500
-            var lastLoss = 0.0
-            for _ in 0..<maxEpochs {
-                lastLoss = model.trainOneEpoch(samples: batch, learningRate: lr, l2: l2)
-                if lastLoss < 0.0005 { break }
-            }
-            self.lock.lock()
-            self.mlp = model
-            self.lock.unlock()
-            DispatchQueue.main.async { [weak self] in
-                self?._trainingLoss = lastLoss
-                self?._isTrained = true
-                self?._isTraining = false
-            }
+    private func refit() {
+        guard samples.count >= Self.minimumSamples else {
+            clearModel()
+            return
         }
+        let w = Double(canvasSize.width)
+        let h = Double(canvasSize.height)
+        let all = samples.map { (x: $0.features, y: $0.target) }
+
+        guard var fitted = GazeRidgeModel.fit(samples: all, lambda: Self.lambdaPerSample * Double(all.count)) else {
+            clearModel()
+            return
+        }
+        var used = all
+
+        // Passe robuste : un tap pris alors que l'enfant regardait ailleurs fausserait tout
+        // le modèle. On écarte les points très au-delà de l'erreur médiane et on réajuste.
+        let residuals = all.map { s -> Double in
+            let p = fitted.predict(s.x)
+            return hypot((p[0] - s.y[0]) * w, (p[1] - s.y[1]) * h)
+        }
+        let median = residuals.sorted()[residuals.count / 2]
+        let threshold = max(3 * median, 120)
+        let keep = residuals.indices.filter { residuals[$0] <= threshold }
+        var usedIndices = Array(all.indices)
+        if keep.count < all.count,
+           keep.count >= max(Self.minimumSamples, Int(Double(all.count) * 0.6)),
+           let refitted = GazeRidgeModel.fit(samples: keep.map { all[$0] },
+                                             lambda: Self.lambdaPerSample * Double(keep.count)) {
+            fitted = refitted
+            usedIndices = keep
+        }
+
+        model = fitted
+        isTrained = true
+
+        // Le rapport (24 ajustements) n'est recalculé à chaque sample que tant qu'il y en a peu ;
+        // ensuite tous les 10 samples, pour ne pas ralentir la partie.
+        guard samples.count <= 40 || samplesSinceReport >= 10 || report.sampleCount == 0 else { return }
+        samplesSinceReport = 0
+        used = usedIndices.map { all[$0] }
+        let measured = usedIndices.indices.filter { !samples[usedIndices[$0]].selfLabelled }
+        report = Self.makeReport(data: used, evaluate: measured, width: w, height: h)
+    }
+
+    private func clearModel() {
+        model = nil
+        isTrained = false
+        report = FitReport()
+    }
+
+    /// `evaluate` : positions dans `data` des samples sur lesquels mesurer l'erreur. Les samples
+    /// auto-étiquetés sont exclus (ils sont consistants avec le modèle par construction).
+    private static func makeReport(data: [(x: [Double], y: [Double])], evaluate: [Int],
+                                   width w: Double, height h: Double) -> FitReport {
+        var r = FitReport()
+        r.sampleCount = data.count
+        let n = Double(data.count)
+
+        // Leave-one-out sur les 24 samples les plus récents : un ajustement par sample, ce
+        // qui reste imperceptible même dans un build Debug.
+        var lx = 0.0, ly = 0.0, count = 0.0
+        for i in (evaluate.isEmpty ? Array(data.indices) : evaluate).suffix(24) {
+            var train = data
+            train.remove(at: i)
+            guard let m = GazeRidgeModel.fit(samples: train, lambda: lambdaPerSample * Double(train.count)) else { continue }
+            let p = m.predict(data[i].x)
+            lx += pow((p[0] - data[i].y[0]) * w, 2)
+            ly += pow((p[1] - data[i].y[1]) * h, 2)
+            count += 1
+        }
+        guard count > 0 else { return r }
+        r.looX = (lx / count).squareRoot()
+        r.looY = (ly / count).squareRoot()
+
+        let meanX = data.reduce(0.0) { $0 + $1.y[0] * w } / n
+        let meanY = data.reduce(0.0) { $0 + $1.y[1] * h } / n
+        let varX = data.reduce(0.0) { $0 + pow($1.y[0] * w - meanX, 2) } / n
+        let varY = data.reduce(0.0) { $0 + pow($1.y[1] * h - meanY, 2) } / n
+        if varX > 1 { r.looR2X = 1 - (r.looX * r.looX) / varX }
+        if varY > 1 { r.looR2Y = 1 - (r.looY * r.looY) / varY }
+        return r
     }
 
     // MARK: - Persistance
 
     private func save() {
-        if let data = try? JSONEncoder().encode(samples) {
+        let store = Store(orientation: sampleOrientation, samples: samples)
+        if let data = try? JSONEncoder().encode(store) {
             UserDefaults.standard.set(data, forKey: persistenceKey)
         }
     }
 
     private func load() {
         guard let data = UserDefaults.standard.data(forKey: persistenceKey),
-              let decoded = try? JSONDecoder().decode([Sample].self, from: data)
+              let store = try? JSONDecoder().decode(Store.self, from: data)
         else { return }
-        samples = decoded.filter { $0.features.count == Self.featureCount && $0.target.count == 2 }
+        sampleOrientation = store.orientation
+        // Les erreurs en pixels de `refit()` doivent utiliser la fenêtre de l'orientation d'origine.
+        let screen = UIScreen.main.bounds.size
+        let landscape = store.orientation == UIInterfaceOrientation.landscapeLeft.rawValue
+            || store.orientation == UIInterfaceOrientation.landscapeRight.rawValue
+        canvasSize = landscape
+            ? CGSize(width: max(screen.width, screen.height), height: min(screen.width, screen.height))
+            : CGSize(width: min(screen.width, screen.height), height: max(screen.width, screen.height))
+        samples = store.samples.filter { $0.features.count == Self.featureCount && $0.target.count == 2 }
         if samples.count > maxSamples {
             samples = Array(samples.suffix(maxSamples))
         }

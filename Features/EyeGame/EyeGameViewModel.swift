@@ -46,7 +46,7 @@ final class EyeGameViewModel {
         // Charge les réglages du filtre persistés par l'utilisateur
         applyStoredFilterSettings()
         // Initialise le Kalman avec la confiance correspondant aux échantillons déjà sauvegardés
-        kalman.setCalibrationConfidence(sampleCount: calibrator.samplesCount)
+        calibrator.tune(kalman)
     }
 
     /// Recharge depuis UserDefaults les réglages utilisateur du filtre de Kalman.
@@ -80,9 +80,10 @@ final class EyeGameViewModel {
         spawnedCount = 0
         processor.reset()
         kalman.reset()
-        kalman.setCalibrationConfidence(sampleCount: calibrator.samplesCount)
+        calibrator.tune(kalman)
         state = .playing
         processor.dwellDuration = speed.dwellDuration
+        processor.targetRadius = calibrator.recommendedDwellRadius
         spawnTarget(in: canvasSize)
     }
 
@@ -94,7 +95,7 @@ final class EyeGameViewModel {
     }
 
     /// Seuil minimum de points calibrés pour pouvoir lancer une partie.
-    static let minimumCalibrationSamples = 9
+    static let minimumCalibrationSamples = GazeCalibrator.minimumSamples
 
     /// Considère le suivi calibré dès qu'on a au moins 9 échantillons (une session
     /// guidée complète sur grille 3×3). En-dessous, le bouton "Lancer" est bloqué.
@@ -112,7 +113,7 @@ final class EyeGameViewModel {
 
         guard state == .playing, let target = currentTarget else { return }
         if processor.update(gazePoint: smoothed, targets: [target]) != nil {
-            recordCalibrationSample(actual: target.position)
+            recordCalibrationSample(actual: target.position, selfLabelled: true)
             completeTarget(canvasSize: canvasSize)
         }
     }
@@ -139,10 +140,10 @@ final class EyeGameViewModel {
     /// features en interne (poussées par ARFaceViewController chaque frame) ;
     /// on ne lui passe que la cible.
     @discardableResult
-    func recordCalibrationSample(actual: CGPoint) -> Bool {
+    func recordCalibrationSample(actual: CGPoint, selfLabelled: Bool = false) -> Bool {
         guard rawGazePoint != .zero else { return false }
-        calibrator.addSample(target: actual)
-        kalman.setCalibrationConfidence(sampleCount: calibrator.samplesCount)
+        calibrator.addSample(target: actual, selfLabelled: selfLabelled)
+        calibrator.tune(kalman)
         return true
     }
 

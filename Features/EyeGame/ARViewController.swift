@@ -1,64 +1,43 @@
 import SwiftUI
+import QuartzCore
 import ARKit
 import simd
 import os.log
 
-/// Wrapper UIKit pour le suivi du regard.
+/// Suivi du regard par ARKit (`ARFaceTrackingConfiguration`).
 ///
-/// **Approche V8 — hybride ARKit + Vision**
+/// À chaque frame on extrait deux mesures indépendantes de la direction du regard :
 ///
-/// La V7 (ARKit `lookAtPoint` + axis swap + conversion mètres→pixels) donne
-/// un signal fonctionnel mais limité par le bruit intrinsèque d'ARKit
-/// (~5–10 mm à 30 cm). Pour aller plus loin on ajoute en parallèle une
-/// pipeline Vision : `VNDetectFaceLandmarksRequest` sur le pixel buffer de
-/// la caméra ARKit, extraction de la position de la pupille relative au
-/// centre de l'œil, normalisée par la largeur de l'œil.
+/// 1. **Impact géométrique** : intersection avec le plan de l'écran (z = 0 dans le repère
+///    caméra) du rayon allant du milieu des yeux au point de fixation `lookAtPoint`. La
+///    formule `œil + t·direction`, `t = −œil.z / direction.z`, ne dépend d'aucune
+///    convention de signe sur z : le même rayon donne le même impact que l'axe de la
+///    caméra pointe vers l'avant ou vers l'arrière.
+/// 2. **Indices blendShapes** : horizontal et vertical, combinaison des 8 coefficients
+///    `eyeLook{In,Out,Up,Down}{Left,Right}`. Mesure d'angle propre à l'utilisateur,
+///    indépendante de l'orientation de l'appareil.
 ///
-/// L'output ARKit reste **primaire** pour l'instant (consommé par le jeu
-/// via `onGazeUpdate`). L'output Vision est exposé via `onVisionGaze` pour
-/// affichage côté diagnostic — on va comparer visuellement avant de basculer
-/// Vision en primaire dans un commit ultérieur.
+/// Ces quatre valeurs partent telles quelles vers `GazeCalibrator`, dont la régression
+/// apprend l'association avec la position à l'écran (axes, signes, gain, décalage).
+/// L'estimation renvoyée par `onGazeUpdate` n'est qu'un repli avant calibration.
+///
+/// Pendant un clignement ARKit perd la pupille et ses sorties sautent : on ignore ces
+/// images et on garde la dernière mesure valide.
 final class ARFaceViewController: UIViewController, ARSessionDelegate {
 
     private static let log = Logger(subsystem: "fr.afsr.RettApp", category: "EyeGame.AR")
 
     let arSession = ARSession()
+
+    /// Estimation géométrique seule, en coordonnées de fenêtre (repli avant calibration).
     var onGazeUpdate: ((CGPoint) -> Void)?
-    /// Callback diagnostic ARKit : position caméra-local en mètres sur chaque
-    /// axe (long = X, court = Y, voir V7 pour le swap vers l'UI).
-    var onGazeDiagnostic: ((_ camX: CGFloat, _ camY: CGFloat) -> Void)?
-    /// Callback diagnostic Vision : point écran dérivé de la position de la
-    /// pupille, offset pupillaire normalisé (x, y ∈ [-0.5, +0.5]), et un
-    /// booléen `hasData` à faux tant qu'aucune inférence n'a produit de
-    /// résultat exploitable.
-    var onVisionGaze: ((_ screenPoint: CGPoint, _ pupilOffset: CGPoint, _ hasData: Bool) -> Void)?
-
-    /// Conversion mètres → pixels logiques (V7, device-aware).
-    private var screen: ScreenSpec {
-        let bounds = UIScreen.main.bounds
-        let pointsPerMeter: Float = UIDevice.current.userInterfaceIdiom == .pad ? 4760 : 5455
-        return ScreenSpec(
-            widthM:  Float(bounds.width)  / pointsPerMeter,
-            heightM: Float(bounds.height) / pointsPerMeter
-        )
-    }
-
-    private struct ScreenSpec {
-        let widthM: Float
-        let heightM: Float
-    }
-
-    /// Gain de conversion `pupilOffset → pixels écran`. À 30 cm de distance
-    /// l'amplitude utile du regard correspond à un pupil offset de ~±0.2 sur
-    /// chaque axe. On veut que ±0.2 couvre environ une demi-largeur d'écran.
-    private var visionGain: CGFloat {
-        let bounds = UIScreen.main.bounds
-        return bounds.width / 0.4  // 0.2 offset × gain = width/2
-    }
-
-    private let pupilTracker = GazePupilTracker()
+    /// Les quatre features brutes : [impact x (m), impact y (m), blend horizontal, blend vertical].
+    var onFeatures: (([Double]) -> Void)?
 
     private var lastLogTime: CFTimeInterval = 0
+    /// Images consécutives ignorées pour cause de clignement, et dernier impact valide.
+    private var blinkFrames = 0
+    private var lastValidHit: SIMD2<Float>?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -71,9 +50,7 @@ final class ARFaceViewController: UIViewController, ARSessionDelegate {
         guard ARFaceTrackingConfiguration.isSupported else { return }
         let config = ARFaceTrackingConfiguration()
         config.isLightEstimationEnabled = false
-        if #available(iOS 13.0, *) {
-            config.maximumNumberOfTrackedFaces = 1
-        }
+        config.maximumNumberOfTrackedFaces = 1
         arSession.run(config, options: [.resetTracking, .removeExistingAnchors])
     }
 
@@ -82,134 +59,103 @@ final class ARFaceViewController: UIViewController, ARSessionDelegate {
         arSession.pause()
     }
 
+    // MARK: - ARSessionDelegate
+
     func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) {
         guard let face = anchors.compactMap({ $0 as? ARFaceAnchor }).first,
               face.isTracked,
-              let frame = session.currentFrame
+              let cameraTransform = session.currentFrame?.camera.transform
         else { return }
-        let cameraTransform = frame.camera.transform
 
-        // --- 1) Pipeline ARKit (V7.1 — ray-cast depuis le visage à travers
-        //        lookAtPoint, intersecté avec le plan écran) ---
-        //
-        // Au lieu de projeter directement `lookAtPoint` (ce qui sous-estime la
-        // course du regard quand ARKit rapporte un point proche du visage),
-        // on trace un rayon depuis la position du visage dans la direction de
-        // lookAtPoint et on intersecte avec z = 0 (plan de l'écran en repère
-        // caméra). Ça extrapole correctement : pour un petit déplacement
-        // oculaire mesuré, le rayon atteint quand même la périphérie de
-        // l'écran si c'est là que le regard pointe réellement.
-        let facePosCam = simd_mul(cameraTransform.inverse, face.transform.columns.3)
-        let faceOrigin = simd_make_float3(facePosCam)
+        func coefficient(_ key: ARFaceAnchor.BlendShapeLocation) -> Double {
+            face.blendShapes[key]?.doubleValue ?? 0
+        }
 
-        let lookAtWorld = face.transform * simd_float4(face.lookAtPoint, 1)
-        let lookAtCam4 = simd_mul(simd_inverse(cameraTransform), lookAtWorld)
-        let lookAtCam = simd_make_float3(lookAtCam4)
-
-        let gazeDirection = lookAtCam - faceOrigin
-        // Le plan écran est z = 0, le visage est devant la caméra (z > 0).
-        // Pour que le rayon atteigne l'écran, direction.z doit être négative.
-        // Si direction.z ≈ 0 (parallèle au plan), on retombe sur la projection
-        // directe pour éviter un hit à l'infini.
-        let hitXY: SIMD2<Float>
-        if gazeDirection.z < -0.01 {
-            let t = -faceOrigin.z / gazeDirection.z
-            let hit = faceOrigin + t * gazeDirection
-            hitXY = SIMD2(hit.x, hit.y)
+        // Un clignement dure ~6 à 24 images à 60 Hz. Au-delà, les paupières sont simplement
+        // mi-closes (ptosis, plissement des yeux) : on ne bloque plus le suivi.
+        if max(coefficient(.eyeBlinkLeft), coefficient(.eyeBlinkRight)) >= 0.5 {
+            blinkFrames += 1
+            if blinkFrames <= 24 { return }
         } else {
-            // Fallback : projection directe de lookAtPoint.
-            hitXY = SIMD2(lookAtCam.x, lookAtCam.y)
+            blinkFrames = 0
         }
 
-        let bounds = UIScreen.main.bounds
-        // Amplification empirique : ARKit sous-rapporte souvent la course du
-        // regard (les yeux bougent peu physiquement même pour grand angle de
-        // regard). Un facteur 1.8 étire la plage typique (±40 % d'écran) pour
-        // atteindre les bords. La calibration en aval compense si c'est trop
-        // ou pas assez.
-        let amplification: Float = 1.8
-        let normX = hitXY.y * amplification / (screen.widthM  * 0.5)
-        let normY = hitXY.x * amplification / (screen.heightM * 0.5)
-        let screenX = CGFloat(normX) * (bounds.width  * 0.5) + bounds.width * 0.5
-        let screenY = CGFloat(normY) * (bounds.height * 0.5)
-        let arkitPoint = CGPoint(x: screenX, y: screenY)
+        // Repère visage → repère caméra.
+        let faceToCamera = cameraTransform.inverse * face.transform
+        let eyeMidFace = (simd_make_float3(face.leftEyeTransform.columns.3)
+                        + simd_make_float3(face.rightEyeTransform.columns.3)) * 0.5
+        let eye = simd_make_float3(faceToCamera * simd_float4(eyeMidFace, 1))
+        let look = simd_make_float3(faceToCamera * simd_float4(face.lookAtPoint, 1))
+        // Impact du rayon ; s'il est indéfini on garde le dernier valide plutôt que de basculer
+        // sur la projection directe, qui n'a pas la même définition (saut de plusieurs cm).
+        let rayHit = Self.screenPlaneHit(eye: eye, look: look)
+        let hit = rayHit ?? lastValidHit ?? SIMD2<Float>(look.x, look.y)
+        if let rayHit { lastValidHit = rayHit }
 
-        // --- 2) Pipeline Vision (nouvelle) ---
-        // Soumet le pixel buffer pour inférence landmarks en background. Lit
-        // le dernier résultat disponible (peut dater d'une frame ou deux).
-        pupilTracker.submit(pixelBuffer: frame.capturedImage)
-        let pupilOffset = pupilTracker.latestPupilOffset
-        let hasVision = pupilTracker.hasPupilData
-        // Convention Vision en `.leftMirrored` : x+ = regard à droite
-        // (anatomique), y+ = regard vers le haut. On mappe sur UI iOS
-        // (y+ = bas) → inversion sur Y.
-        let visionScreenX = bounds.width  * 0.5 + pupilOffset.x * visionGain
-        let visionScreenY = bounds.height * 0.5 - pupilOffset.y * visionGain
-        let visionPoint = CGPoint(x: visionScreenX, y: visionScreenY)
+        let horizontal = ((coefficient(.eyeLookOutRight) + coefficient(.eyeLookInLeft))
+                        - (coefficient(.eyeLookOutLeft) + coefficient(.eyeLookInRight))) * 0.5
+        let vertical = ((coefficient(.eyeLookUpRight) + coefficient(.eyeLookUpLeft))
+                      - (coefficient(.eyeLookDownRight) + coefficient(.eyeLookDownLeft))) * 0.5
 
-        let now = CACurrentMediaTime()
-        if now - lastLogTime > 2.0 {
-            lastLogTime = now
-            Self.log.info(
-                "arkit=(\(Int(screenX)),\(Int(screenY))) vision hasData=\(hasVision) pupil=(\(pupilOffset.x, format: .fixed(precision: 3)),\(pupilOffset.y, format: .fixed(precision: 3))) → (\(Int(visionScreenX)),\(Int(visionScreenY)))"
-            )
-        }
+        let features: [Double] = [Double(hit.x), Double(hit.y), horizontal, vertical]
 
-        // --- 3) Features MLP (calculées sync avant dispatch main) ---
-        // Vecteur 9D consommé par le calibrateur `GazeMLP`. Inclut :
-        //   [0,1] arkit normalisé sur la taille écran
-        //   [2-4] vecteur +Z du repère visage en caméra-local (orientation
-        //         de la tête compressée en 3 valeurs, invariante à l'ordre
-        //         d'application des rotations)
-        //   [5,6] offset pupillaire Vision (0 si pas encore de détection)
-        //   [7,8] clignement gauche/droit depuis les blendShapes ARKit
-        let headInCamera = cameraTransform.inverse * face.transform
-        let headFwd = simd_make_float3(headInCamera.columns.2)
-        let blends = face.blendShapes
-        let leftBlink  = (blends[.eyeBlinkLeft]  as? NSNumber)?.doubleValue ?? 0
-        let rightBlink = (blends[.eyeBlinkRight] as? NSNumber)?.doubleValue ?? 0
-
-        let features: [Double] = [
-            Double(screenX / bounds.width),
-            Double(screenY / bounds.height),
-            Double(headFwd.x),
-            Double(headFwd.y),
-            Double(headFwd.z),
-            Double(pupilOffset.x),
-            Double(pupilOffset.y),
-            leftBlink,
-            rightBlink,
-        ]
-
-        // Un seul dispatch main : updateFeatures d'ABORD (le MLP a besoin
-        // des features fraîches), puis onGazeUpdate déclenche l'apply()
-        // côté VM qui va consommer ces features.
         DispatchQueue.main.async { [weak self] in
-            GazeCalibrator.shared.updateFeatures(features, canvasSize: bounds.size)
-            self?.onGazeUpdate?(arkitPoint)
-            self?.onGazeDiagnostic?(CGFloat(lookAtCam.x), CGFloat(lookAtCam.y))
-            self?.onVisionGaze?(visionPoint, pupilOffset, hasVision)
+            guard let self else { return }
+            let bounds = self.view.window?.bounds ?? UIScreen.main.bounds
+            let orientation = self.view.window?.windowScene?.interfaceOrientation.rawValue
+                ?? UIInterfaceOrientation.portrait.rawValue
+
+            // D'abord les features (le calibrateur les lit dans `apply`), ensuite le callback.
+            GazeCalibrator.shared.updateFeatures(features, canvasSize: bounds.size, orientation: orientation)
+
+            // Repli géométrique, valable en portrait (l'axe long de la caméra est l'axe
+            // vertical de l'écran) : 1 m ≈ 5455 pt sur iPhone, 4760 pt sur iPad.
+            let pointsPerMeter: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 4760 : 5455
+            let gain = pointsPerMeter * 1.8
+            let fallback = CGPoint(x: bounds.width * 0.5 + CGFloat(hit.y) * gain,
+                                   y: CGFloat(hit.x) * gain)
+
+            self.onGazeUpdate?(fallback)
+            self.onFeatures?(features)
+
+            let now = CACurrentMediaTime()
+            if now - self.lastLogTime > 2.0 {
+                self.lastLogTime = now
+                Self.log.info(
+                    "gaze hit=(\(hit.x, format: .fixed(precision: 4)),\(hit.y, format: .fixed(precision: 4)))m blend=(\(horizontal, format: .fixed(precision: 3)),\(vertical, format: .fixed(precision: 3))) orientation=\(orientation)"
+                )
+            }
         }
+    }
+
+    /// Impact du rayon œil → point de fixation sur le plan z = 0 (repère caméra).
+    /// nil si le rayon est quasi parallèle à l'écran ou ne le rencontre pas devant lui.
+    private static func screenPlaneHit(eye: SIMD3<Float>, look: SIMD3<Float>) -> SIMD2<Float>? {
+        let direction = look - eye
+        if abs(direction.z) > 0.02 {
+            let t = -eye.z / direction.z
+            if t > 0.2 && t < 8 {
+                return SIMD2<Float>(eye.x + t * direction.x, eye.y + t * direction.y)
+            }
+        }
+        return nil
     }
 }
 
-/// Représentable SwiftUI pour le tracking facial.
+/// Représentable SwiftUI pour le suivi du regard.
 struct ARFaceView: UIViewControllerRepresentable {
     let onGazeUpdate: (CGPoint) -> Void
-    var onGazeDiagnostic: ((CGFloat, CGFloat) -> Void)? = nil
-    var onVisionGaze: ((CGPoint, CGPoint, Bool) -> Void)? = nil
+    var onFeatures: (([Double]) -> Void)? = nil
 
     func makeUIViewController(context: Context) -> ARFaceViewController {
         let vc = ARFaceViewController()
         vc.onGazeUpdate = onGazeUpdate
-        vc.onGazeDiagnostic = onGazeDiagnostic
-        vc.onVisionGaze = onVisionGaze
+        vc.onFeatures = onFeatures
         return vc
     }
 
     func updateUIViewController(_ vc: ARFaceViewController, context: Context) {
         vc.onGazeUpdate = onGazeUpdate
-        vc.onGazeDiagnostic = onGazeDiagnostic
-        vc.onVisionGaze = onVisionGaze
+        vc.onFeatures = onFeatures
     }
 }

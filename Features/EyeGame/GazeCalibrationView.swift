@@ -1,15 +1,16 @@
 import SwiftUI
+import QuartzCore
 
-/// Session de calibration guidée : cibles successives sur une grille 3×3
-/// (cyclées indéfiniment). Le parent attire le regard de l'enfant sur chaque
-/// cible et tape n'importe où à l'écran quand l'enfant la regarde — chaque tap
-/// enregistre une paire `(rawGaze courant, position cible)` dans le calibrateur
-/// partagé `GazeCalibrator.shared`.
+/// Session de calibration guidée : cibles successives sur une grille 3×3 (cyclées
+/// indéfiniment). Le parent attire le regard de l'enfant sur chaque cible et tape
+/// n'importe où à l'écran quand l'enfant la regarde ; chaque tap enregistre
+/// `(features du regard, position de la cible)` dans `GazeCalibrator.shared`.
 ///
-/// Hiérarchie visuelle volontairement asymétrique : la cible est dominante
-/// (taille, couleurs, halo pulsant), tout le reste (bouton Fermer, badge de
-/// progression, bannière d'instructions) est discret pour ne pas distraire le
-/// regard de l'enfant.
+/// La vue occupe tout l'écran (origine 0,0) : les positions des cibles sont ainsi dans le
+/// même repère que celui du regard et des écrans de jeu.
+///
+/// Hiérarchie visuelle volontairement asymétrique : la cible est dominante (taille,
+/// couleurs, halo pulsant), le reste est discret pour ne pas distraire le regard.
 struct GazeCalibrationView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -18,28 +19,8 @@ struct GazeCalibrationView: View {
     @State private var rawGazePoint: CGPoint = .zero
     @State private var calibratedPoint: CGPoint = .zero
     @State private var displayPoint: CGPoint = .zero
-
-    /// Moyenne mobile exponentielle du point raw, utilisée à la place du raw
-    /// instantané (très bruité) lors de l'enregistrement d'un échantillon.
-    /// α = 0.10 → constante de temps ≈ 150 ms à 60 Hz. Plus de moyennage
-    /// que ce qu'on avait précédemment (0.15 ≈ 100 ms) → samples de
-    /// calibration plus propres → fit quadratique plus précis. Le tap reste
-    /// instantané côté UX, c'est juste l'historique court qui est plus lissé.
-    @State private var emaRawPoint: CGPoint = .zero
-    @State private var emaInitialized: Bool = false
-    private let emaAlpha: CGFloat = 0.10
-
-    /// Valeurs brutes h, v ∈ [-1, 1] sorties d'ARKit avant tout mapping écran.
-    /// Affichées dans le readout de diagnostic.
-    @State private var blendH: CGFloat = 0
-    @State private var blendV: CGFloat = 0
-
-    /// Point écran dérivé du pipeline Vision (VNDetectFaceLandmarksRequest
-    /// → position de la pupille → mapping écran). Comparé visuellement au
-    /// pipeline ARKit via un dot orange.
-    @State private var visionPoint: CGPoint = .zero
-    @State private var pupilOffset: CGPoint = .zero
-    @State private var hasVisionData: Bool = false
+    @State private var features: [Double] = []
+    @State private var lastFeaturesUpdate: CFTimeInterval = 0
 
     private let normalizedPositions: [CGPoint] = [
         CGPoint(x: 0.15, y: 0.22), CGPoint(x: 0.50, y: 0.22), CGPoint(x: 0.85, y: 0.22),
@@ -62,8 +43,7 @@ struct GazeCalibrationView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                // Fond sombre, légèrement bleuté pour reposer l'œil et faire
-                // ressortir le jaune/orange de la cible.
+                // Fond sombre légèrement bleuté : repose l'œil et fait ressortir la cible.
                 LinearGradient(
                     colors: [Color(hex: "#0F1726"), Color(hex: "#1B2438")],
                     startPoint: .top, endPoint: .bottom
@@ -73,62 +53,42 @@ struct GazeCalibrationView: View {
                 ARFaceView(
                     onGazeUpdate: { point in
                         rawGazePoint = point
-                        if emaInitialized {
-                            emaRawPoint = CGPoint(
-                                x: emaAlpha * point.x + (1 - emaAlpha) * emaRawPoint.x,
-                                y: emaAlpha * point.y + (1 - emaAlpha) * emaRawPoint.y
-                            )
-                        } else {
-                            emaRawPoint = point
-                            emaInitialized = true
-                        }
                         let calibrated = calibrator.apply(point)
                         calibratedPoint = calibrated
                         displayPoint = kalman.filter(measurement: calibrated)
                     },
-                    onGazeDiagnostic: { h, v in
-                        blendH = h
-                        blendV = v
-                    },
-                    onVisionGaze: { screen, offset, has in
-                        visionPoint = screen
-                        pupilOffset = offset
-                        hasVisionData = has
+                    onFeatures: { values in
+                        // Le HUD n'a pas besoin du 60 Hz : on limite les invalidations de la vue.
+                        let now = CACurrentMediaTime()
+                        if now - lastFeaturesUpdate > 0.1 {
+                            lastFeaturesUpdate = now
+                            features = values
+                        }
                     }
                 )
                 .allowsHitTesting(false)
                 .opacity(0.001)
 
-                // Overlay de diagnostic : quatre points pour distinguer les
-                // étapes du pipeline ARKit (rouge, jaune, bleu) + le pipeline
-                // Vision (orange, pupille). On compare orange vs bleu pour
-                // décider si Vision est plus stable que ARKit.
-                DiagnosticDot(color: .red,    diameter: 14).position(rawGazePoint).allowsHitTesting(false)
+                // Diagnostic : rouge = estimation ARKit brute, jaune = après calibration,
+                // bleu = sortie finale (après Kalman). Rouge et jaune sont superposés tant
+                // que la calibration n'est pas entraînée.
+                DiagnosticDot(color: .red, diameter: 14).position(rawGazePoint).allowsHitTesting(false)
                 DiagnosticDot(color: .yellow, diameter: 14).position(calibratedPoint).allowsHitTesting(false)
                 GazeIndicator()
                     .position(displayPoint)
                     .allowsHitTesting(false)
-                if hasVisionData {
-                    DiagnosticDot(color: .orange, diameter: 16)
-                        .position(visionPoint)
-                        .allowsHitTesting(false)
-                }
 
-                // Couche de capture des taps : sous les visuels (qui ne
-                // capturent rien) mais au-dessus de l'AR.
+                // Capture des taps : sous les visuels (qui ne capturent rien), au-dessus de l'AR.
                 Color.clear
                     .contentShape(Rectangle())
                     .onTapGesture { handleTap() }
 
-                // Cible — dominante : grande, halo pulsant, couleur chaude.
-                let p = currentPosition(in: geo.size)
                 BigTarget(diameter: 180, pulsing: pulse, splashing: splashAtTarget)
-                    .position(p)
+                    .position(currentPosition(in: geo.size))
                     .allowsHitTesting(false)
 
                 VStack {
                     HStack(alignment: .top) {
-                        // Bouton Fermer : icône seule, discrète.
                         Button {
                             dismiss()
                         } label: {
@@ -142,14 +102,13 @@ struct GazeCalibrationView: View {
 
                         Spacer()
 
-                        // Compteur : minuscule, presque invisible.
                         SubtleProgressBadge(
                             samples: calibrator.samplesCount,
                             minimum: minimumSamples
                         )
                     }
                     .padding(.horizontal, 16)
-                    .padding(.top, 8)
+                    .padding(.top, geo.safeAreaInsets.top + 8)
 
                     Spacer()
 
@@ -158,15 +117,11 @@ struct GazeCalibrationView: View {
                         calibrated: calibratedPoint,
                         smoothed: displayPoint,
                         canvas: geo.size,
-                        isTrained: calibrator.isTrained,
-                        isTraining: calibrator.isTraining,
-                        trainingLoss: calibrator.trainingLoss,
+                        features: features,
                         samplesCount: calibrator.samplesCount,
-                        blendH: blendH,
-                        blendV: blendV,
-                        pupilOffset: pupilOffset,
-                        hasVision: hasVisionData,
-                        visionPoint: visionPoint
+                        minimumSamples: minimumSamples,
+                        isTrained: calibrator.isTrained,
+                        report: calibrator.report
                     )
                     .padding(.horizontal, 24)
                     .padding(.bottom, 8)
@@ -184,10 +139,7 @@ struct GazeCalibrationView: View {
                     }
 
                     if calibrator.samplesCount >= minimumSamples {
-                        // Le fit quadratique par axe gagne significativement
-                        // en précision entre 9 et ~18-25 samples. On le
-                        // signale tant qu'on est sous 18 pour que le parent
-                        // sache que continuer améliore la cible.
+                        // La précision continue de s'améliorer jusqu'à ~18 points.
                         if calibrator.samplesCount < 18 {
                             Text("Continuez : précision améliorée jusqu'à ~18 points")
                                 .font(AFSRFont.caption(11))
@@ -203,20 +155,23 @@ struct GazeCalibrationView: View {
                                 .padding(.horizontal, 20).padding(.vertical, 12)
                                 .background(Color.afsrSuccess.opacity(0.85), in: Capsule())
                         }
-                        .padding(.bottom, 16)
+                        .padding(.bottom, geo.safeAreaInsets.bottom + 16)
                     } else {
-                        Color.clear.frame(height: 16)
+                        Color.clear.frame(height: geo.safeAreaInsets.bottom + 16)
                     }
                 }
             }
             .onAppear {
                 canvasSize = geo.size
                 pulse = true
+                calibrator.tune(kalman)
             }
             .onChange(of: geo.size) { _, newSize in
                 canvasSize = newSize
             }
         }
+        .ignoresSafeArea()
+        .statusBarHidden(true)
         .navigationBarBackButtonHidden(true)
     }
 
@@ -226,30 +181,23 @@ struct GazeCalibrationView: View {
     }
 
     private func handleTap() {
-        let target = currentPosition(in: canvasSize)
-        guard emaInitialized, rawGazePoint != .zero else {
+        guard calibrator.addSample(target: currentPosition(in: canvasSize)) else {
             withAnimation(.easeInOut(duration: 0.2)) { showRejectedFeedback = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
                 withAnimation(.easeInOut(duration: 0.3)) { showRejectedFeedback = false }
             }
             return
         }
-        // Le calibrateur MLP utilise directement les features EMA qu'il cache
-        // en interne (mises à jour à chaque frame par l'AR view controller).
-        // Pas besoin de lui passer les coordonnées raw : elles sont déjà
-        // incluses dans le vecteur de features [0, 1].
-        calibrator.addSample(target: target)
         showRejectedFeedback = false
+        calibrator.tune(kalman)
 
         withAnimation(.easeOut(duration: 0.18)) { splashAtTarget = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
             splashAtTarget = false
             withAnimation(.easeInOut(duration: 0.25)) {
-                currentIndex = currentIndex + 1
+                currentIndex += 1
             }
-            // Reset EMA côté view (pour l'indicateur local) et côté calibrateur
-            // (pour que le sample suivant parte d'une fenêtre fraîche).
-            emaInitialized = false
+            // Le sample suivant repart d'une fenêtre de lissage fraîche.
             calibrator.resetEMA()
         }
     }
@@ -272,53 +220,38 @@ private struct DiagnosticReadout: View {
     let calibrated: CGPoint
     let smoothed: CGPoint
     let canvas: CGSize
-    let isTrained: Bool
-    let isTraining: Bool
-    let trainingLoss: Double
+    let features: [Double]
     let samplesCount: Int
-    let blendH: CGFloat
-    let blendV: CGFloat
-    let pupilOffset: CGPoint
-    let hasVision: Bool
-    let visionPoint: CGPoint
+    let minimumSamples: Int
+    let isTrained: Bool
+    let report: GazeCalibrator.FitReport
 
-    private var mlpStatus: String {
-        if isTraining { return "mlp: entraînement en cours…" }
-        if isTrained  { return String(format: "mlp: entraîné (%d samples, loss=%.4f)", samplesCount, trainingLoss) }
-        let needed = max(0, 9 - samplesCount)
-        return "mlp: pas encore entraîné — \(needed) sample(s) manquant(s)"
+    private var featuresLine: String {
+        guard features.count == GazeCalibrator.featureCount else { return "features : en attente d'ARKit…" }
+        return String(format: "impact x=%+6.1f y=%+6.1f mm   blend h=%+.3f v=%+.3f",
+                      features[0] * 1000, features[1] * 1000, features[2], features[3])
+    }
+
+    private var modelLine: String {
+        guard isTrained else {
+            let missing = max(0, minimumSamples - samplesCount)
+            return "pas encore calibré — encore \(missing) point(s)"
+        }
+        return String(format: "modèle %d/%d pts · erreur x=±%.0fpx (R² %.2f) y=±%.0fpx (R² %.2f)",
+                      report.sampleCount, samplesCount, report.looX, report.looR2X, report.looY, report.looR2Y)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Text(String(format: "lookAtCam x=%+6.1f y=%+6.1f mm (x=vert, y=horiz UI)",
-                            Double(blendH) * 1000, Double(blendV) * 1000))
-                Spacer()
-            }
-            .foregroundStyle(.white.opacity(0.85))
-            row(color: .red,    label: "raw",  pt: raw)
-            row(color: .yellow, label: "cal",  pt: calibrated)
-            row(color: .blue,   label: "out",  pt: smoothed)
-            if hasVision {
-                row(color: .orange, label: "vis",  pt: visionPoint)
-                HStack {
-                    Text(String(format: "pupil Δx=%+.3f Δy=%+.3f (eye-width units)",
-                                Double(pupilOffset.x), Double(pupilOffset.y)))
-                    Spacer()
-                }
-                .foregroundStyle(.orange.opacity(0.85))
-            } else {
-                Text("vision: en attente de la 1ère inférence…")
-                    .foregroundStyle(.orange.opacity(0.6))
-            }
-            HStack {
-                Text("canvas \(Int(canvas.width))×\(Int(canvas.height))")
-                Spacer()
-                Text(mlpStatus)
-                    .foregroundStyle(isTrained ? Color.afsrSuccess.opacity(0.9) : .white.opacity(0.6))
-            }
-            .foregroundStyle(.white.opacity(0.6))
+            Text(featuresLine)
+                .foregroundStyle(.white.opacity(0.85))
+            row(color: .red, label: "raw", pt: raw)
+            row(color: .yellow, label: "cal", pt: calibrated)
+            row(color: .blue, label: "out", pt: smoothed)
+            Text("fenêtre \(Int(canvas.width))×\(Int(canvas.height))")
+                .foregroundStyle(.white.opacity(0.6))
+            Text(modelLine)
+                .foregroundStyle(isTrained ? Color.afsrSuccess.opacity(0.9) : .white.opacity(0.6))
         }
         .font(.system(size: 10, design: .monospaced))
         .foregroundStyle(.white.opacity(0.85))
@@ -355,7 +288,6 @@ private struct BigTarget: View {
 
     var body: some View {
         ZStack {
-            // Halo extérieur : très large, animé, opacité basse.
             Circle()
                 .fill(
                     RadialGradient(
@@ -372,14 +304,12 @@ private struct BigTarget: View {
                 .scaleEffect(pulsing ? 1.05 : 0.85)
                 .animation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true), value: pulsing)
 
-            // Anneau pulsant net.
             Circle()
                 .stroke(Color(hex: "#FFD93D"), lineWidth: 6)
                 .frame(width: diameter + 36, height: diameter + 36)
                 .scaleEffect(pulsing ? 1.10 : 0.96)
                 .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulsing)
 
-            // Disque central avec dégradé chaud.
             Circle()
                 .fill(
                     RadialGradient(
@@ -402,7 +332,6 @@ private struct BigTarget: View {
     }
 }
 
-/// Compteur minimal : juste deux nombres séparés par un slash, sans icône.
 private struct SubtleProgressBadge: View {
     let samples: Int
     let minimum: Int
@@ -417,7 +346,6 @@ private struct SubtleProgressBadge: View {
     }
 }
 
-/// Indication discrète au lieu d'une bannière imposante.
 private struct SubtleHint: View {
     var body: some View {
         Text("Tape l'écran quand l'enfant fixe la cible")

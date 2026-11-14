@@ -21,7 +21,6 @@ final class GazeKalmanFilter {
     // MARK: - Tuning baseline
 
     private let sigmaMeasureHighBase: Double = 60.0
-    private let sigmaMeasureLowBase: Double = 8.0
     private let samplesForFullConfidence: Double = 10.0
     private let sigmaAcceleration: Double = 4000.0
 
@@ -35,6 +34,12 @@ final class GazeKalmanFilter {
     }
 
     var enabled: Bool = true
+
+    /// σ de mesure (px) quand la calibration est stable. Réglé d'après l'erreur mesurée de la
+    /// calibration (voir `GazeCalibrator.tune`), 8 px au minimum.
+    var measurementSigmaFloor: Double = 8.0 {
+        didSet { recomputeR() }
+    }
 
     // MARK: - State
 
@@ -65,7 +70,7 @@ final class GazeKalmanFilter {
 
     private func recomputeR() {
         let factor = min(Double(lastSampleCount) / samplesForFullConfidence, 1.0)
-        let baseSigma = sigmaMeasureHighBase - (sigmaMeasureHighBase - sigmaMeasureLowBase) * factor
+        let baseSigma = sigmaMeasureHighBase - (sigmaMeasureHighBase - measurementSigmaFloor) * factor
         let sigma = baseSigma * (1.0 + 3.0 * smoothingStrength)
         measurementVariance = sigma * sigma
     }

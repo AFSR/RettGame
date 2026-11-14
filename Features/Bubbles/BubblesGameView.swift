@@ -28,6 +28,10 @@ struct BubblesGameView: View {
         }
         .navigationTitle("Bulles colorées")
         .navigationBarTitleDisplayMode(.inline)
+        // Pendant la partie, tout l'écran sert de zone de regard : pas de barre de navigation
+        // (le bouton « Quitter » est dans la vue de jeu).
+        .toolbar(viewModel.state == .playing ? .hidden : .automatic, for: .navigationBar)
+        .statusBarHidden(viewModel.state == .playing)
     }
 }
 
@@ -216,6 +220,7 @@ private struct PlayingView: View {
                         ScoreBadge(score: viewModel.score)
                     }
                     .padding()
+                    .padding(.top, geo.safeAreaInsets.top)
                     Spacer()
                 }
                 .allowsHitTesting(true)
@@ -238,6 +243,9 @@ private struct PlayingView: View {
                 viewModel.updateCanvasSize(newSize)
             }
         }
+        // Plein écran : l'origine de la zone de jeu est celle de la fenêtre, comme pour le
+        // regard et la calibration (voir GazeCalibrator).
+        .ignoresSafeArea()
     }
 }
 

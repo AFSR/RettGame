@@ -53,10 +53,18 @@ final class GazeProcessor {
             reset()
         }
 
-        // (2) Recherche d'une nouvelle cible avec le rayon strict.
-        guard let hit = targets.first(where: { distance($0.position, gazePoint) < radiusFor($0) }) else {
-            return nil
+        // (2) Recherche d'une nouvelle cible avec le rayon strict : la plus proche du regard
+        // parmi celles qui le contiennent (plusieurs bulles peuvent se chevaucher).
+        var nearest: GameTarget?
+        var nearestDistance = CGFloat.greatestFiniteMagnitude
+        for target in targets {
+            let d = distance(target.position, gazePoint)
+            if d < radiusFor(target), d < nearestDistance {
+                nearest = target
+                nearestDistance = d
+            }
         }
+        guard let hit = nearest else { return nil }
         currentTargetId = hit.id
         gazeStartTime = Date()
         dwellProgress = 0
