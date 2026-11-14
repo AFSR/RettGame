@@ -89,14 +89,47 @@ final class ARFaceViewController: UIViewController, ARSessionDelegate {
         else { return }
         let cameraTransform = frame.camera.transform
 
-        // --- 1) Pipeline ARKit (V7, inchangée) ---
-        let faceToDevice = cameraTransform.inverse * face.transform
+        // --- 1) Pipeline ARKit (V7.1 — ray-cast depuis le visage à travers
+        //        lookAtPoint, intersecté avec le plan écran) ---
+        //
+        // Au lieu de projeter directement `lookAtPoint` (ce qui sous-estime la
+        // course du regard quand ARKit rapporte un point proche du visage),
+        // on trace un rayon depuis la position du visage dans la direction de
+        // lookAtPoint et on intersecte avec z = 0 (plan de l'écran en repère
+        // caméra). Ça extrapole correctement : pour un petit déplacement
+        // oculaire mesuré, le rayon atteint quand même la périphérie de
+        // l'écran si c'est là que le regard pointe réellement.
+        let facePosCam = simd_mul(cameraTransform.inverse, face.transform.columns.3)
+        let faceOrigin = simd_make_float3(facePosCam)
+
         let lookAtWorld = face.transform * simd_float4(face.lookAtPoint, 1)
-        let lookAtCam = simd_mul(simd_inverse(cameraTransform), lookAtWorld)
+        let lookAtCam4 = simd_mul(simd_inverse(cameraTransform), lookAtWorld)
+        let lookAtCam = simd_make_float3(lookAtCam4)
+
+        let gazeDirection = lookAtCam - faceOrigin
+        // Le plan écran est z = 0, le visage est devant la caméra (z > 0).
+        // Pour que le rayon atteigne l'écran, direction.z doit être négative.
+        // Si direction.z ≈ 0 (parallèle au plan), on retombe sur la projection
+        // directe pour éviter un hit à l'infini.
+        let hitXY: SIMD2<Float>
+        if gazeDirection.z < -0.01 {
+            let t = -faceOrigin.z / gazeDirection.z
+            let hit = faceOrigin + t * gazeDirection
+            hitXY = SIMD2(hit.x, hit.y)
+        } else {
+            // Fallback : projection directe de lookAtPoint.
+            hitXY = SIMD2(lookAtCam.x, lookAtCam.y)
+        }
 
         let bounds = UIScreen.main.bounds
-        let normX = lookAtCam.y / (screen.widthM  * 0.5)
-        let normY = lookAtCam.x / (screen.heightM * 0.5)
+        // Amplification empirique : ARKit sous-rapporte souvent la course du
+        // regard (les yeux bougent peu physiquement même pour grand angle de
+        // regard). Un facteur 1.8 étire la plage typique (±40 % d'écran) pour
+        // atteindre les bords. La calibration en aval compense si c'est trop
+        // ou pas assez.
+        let amplification: Float = 1.8
+        let normX = hitXY.y * amplification / (screen.widthM  * 0.5)
+        let normY = hitXY.x * amplification / (screen.heightM * 0.5)
         let screenX = CGFloat(normX) * (bounds.width  * 0.5) + bounds.width * 0.5
         let screenY = CGFloat(normY) * (bounds.height * 0.5)
         let arkitPoint = CGPoint(x: screenX, y: screenY)
