@@ -16,6 +16,7 @@
 		8FE89530940E3152E200AD2A /* GazeProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68DF3BAFBF2B9ED37E0FDB42 /* GazeProcessor.swift */; };
 		A1B2C3D4E5F61234567890AC /* GazeCalibrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F61234567890AB /* GazeCalibrationView.swift */; };
 		C3E8D7F9A2B4556778990012 /* GazePupilTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3E8D7F9A2B4556778990011 /* GazePupilTracker.swift */; };
+		D4F9E8B6A1C2334455660021 /* GazeMLP.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F9E8B6A1C2334455660020 /* GazeMLP.swift */; };
 		B0BB1ECCAFE0000000000003 /* BubblesGameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0BB1ECCAFE0000000000002 /* BubblesGameView.swift */; };
 		B0BB1ECCAFE0000000000005 /* BubblesGameViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0BB1ECCAFE0000000000004 /* BubblesGameViewModel.swift */; };
 		953EDF9273E0DD3F39583F26 /* EyeGameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4811327C6B6345B92DE32FD7 /* EyeGameView.swift */; };
@@ -53,6 +54,7 @@
 		F39AB8279FBE149919D00D28 /* ARViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ARViewController.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F61234567890AB /* GazeCalibrationView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GazeCalibrationView.swift; sourceTree = "<group>"; };
 		C3E8D7F9A2B4556778990011 /* GazePupilTracker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GazePupilTracker.swift; sourceTree = "<group>"; };
+		D4F9E8B6A1C2334455660020 /* GazeMLP.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GazeMLP.swift; sourceTree = "<group>"; };
 		B0BB1ECCAFE0000000000002 /* BubblesGameView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BubblesGameView.swift; sourceTree = "<group>"; };
 		B0BB1ECCAFE0000000000004 /* BubblesGameViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BubblesGameViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -131,6 +133,7 @@
 				A1B2C3D4E5F61234567890AB /* GazeCalibrationView.swift */,
 				62786BA0B838B7DCE3EFB815 /* GazeCalibrator.swift */,
 				C3E8D7F9A2B4556778990011 /* GazePupilTracker.swift */,
+				D4F9E8B6A1C2334455660020 /* GazeMLP.swift */,
 				E4E989EEE8212A2394ECB408 /* GazeKalmanFilter.swift */,
 				68DF3BAFBF2B9ED37E0FDB42 /* GazeProcessor.swift */,
 			);
@@ -273,6 +276,7 @@
 				955DE7286B8E62D6FC4786F0 /* EyeGameViewModel.swift in Sources */,
 				83D46D41EFDE2F1289B8849A /* GazeCalibrator.swift in Sources */,
 				C3E8D7F9A2B4556778990012 /* GazePupilTracker.swift in Sources */,
+				D4F9E8B6A1C2334455660021 /* GazeMLP.swift in Sources */,
 				B39A08F6FCBAE317AE2EF49A /* GazeKalmanFilter.swift in Sources */,
 				8FE89530940E3152E200AD2A /* GazeProcessor.swift in Sources */,
 				A1B2C3D4E5F61234567890AC /* GazeCalibrationView.swift in Sources */,

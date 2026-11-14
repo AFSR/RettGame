@@ -155,7 +155,37 @@ final class ARFaceViewController: UIViewController, ARSessionDelegate {
             )
         }
 
+        // --- 3) Features MLP (calculées sync avant dispatch main) ---
+        // Vecteur 9D consommé par le calibrateur `GazeMLP`. Inclut :
+        //   [0,1] arkit normalisé sur la taille écran
+        //   [2-4] vecteur +Z du repère visage en caméra-local (orientation
+        //         de la tête compressée en 3 valeurs, invariante à l'ordre
+        //         d'application des rotations)
+        //   [5,6] offset pupillaire Vision (0 si pas encore de détection)
+        //   [7,8] clignement gauche/droit depuis les blendShapes ARKit
+        let headInCamera = cameraTransform.inverse * face.transform
+        let headFwd = simd_make_float3(headInCamera.columns.2)
+        let blends = face.blendShapes
+        let leftBlink  = (blends[.eyeBlinkLeft]  as? NSNumber)?.doubleValue ?? 0
+        let rightBlink = (blends[.eyeBlinkRight] as? NSNumber)?.doubleValue ?? 0
+
+        let features: [Double] = [
+            Double(screenX / bounds.width),
+            Double(screenY / bounds.height),
+            Double(headFwd.x),
+            Double(headFwd.y),
+            Double(headFwd.z),
+            Double(pupilOffset.x),
+            Double(pupilOffset.y),
+            leftBlink,
+            rightBlink,
+        ]
+
+        // Un seul dispatch main : updateFeatures d'ABORD (le MLP a besoin
+        // des features fraîches), puis onGazeUpdate déclenche l'apply()
+        // côté VM qui va consommer ces features.
         DispatchQueue.main.async { [weak self] in
+            GazeCalibrator.shared.updateFeatures(features, canvasSize: bounds.size)
             self?.onGazeUpdate?(arkitPoint)
             self?.onGazeDiagnostic?(CGFloat(lookAtCam.x), CGFloat(lookAtCam.y))
             self?.onVisionGaze?(visionPoint, pupilOffset, hasVision)

@@ -135,13 +135,13 @@ final class EyeGameViewModel {
 
     /// Enregistre un échantillon de calibration sans vérification de proximité.
     /// Utilisé par les hits de dwell et les taps parents. Retourne `false` si
-    /// ARKit n'a pas encore produit de regard. Ne refait PAS tourner le Kalman :
-    /// la prochaine frame `handleGaze` (~16 ms plus tard) appliquera la nouvelle
-    /// transformation de calibration au point déjà à l'écran — délai imperceptible.
+    /// ARKit n'a pas encore produit de regard. Le calibrateur MLP cache les
+    /// features en interne (poussées par ARFaceViewController chaque frame) ;
+    /// on ne lui passe que la cible.
     @discardableResult
     func recordCalibrationSample(actual: CGPoint) -> Bool {
         guard rawGazePoint != .zero else { return false }
-        calibrator.addSample(raw: rawGazePoint, actual: actual)
+        calibrator.addSample(target: actual)
         kalman.setCalibrationConfidence(sampleCount: calibrator.samplesCount)
         return true
     }

@@ -158,8 +158,10 @@ struct GazeCalibrationView: View {
                         calibrated: calibratedPoint,
                         smoothed: displayPoint,
                         canvas: geo.size,
-                        scaleX: calibrator.m00,
-                        scaleY: calibrator.m11,
+                        isTrained: calibrator.isTrained,
+                        isTraining: calibrator.isTraining,
+                        trainingLoss: calibrator.trainingLoss,
+                        samplesCount: calibrator.samplesCount,
                         blendH: blendH,
                         blendV: blendV,
                         pupilOffset: pupilOffset,
@@ -232,11 +234,11 @@ struct GazeCalibrationView: View {
             }
             return
         }
-        // On utilise la moyenne mobile : un instantané a typiquement ±5–10 px
-        // de bruit, ce qui détruit la pente de régression quand le signal raw
-        // est lui-même petit (cas des enfants Rett avec amplitude oculaire
-        // modeste). Moyennée sur ~100 ms, l'entrée est nettement plus propre.
-        calibrator.addSample(raw: emaRawPoint, actual: target)
+        // Le calibrateur MLP utilise directement les features EMA qu'il cache
+        // en interne (mises à jour à chaque frame par l'AR view controller).
+        // Pas besoin de lui passer les coordonnées raw : elles sont déjà
+        // incluses dans le vecteur de features [0, 1].
+        calibrator.addSample(target: target)
         showRejectedFeedback = false
 
         withAnimation(.easeOut(duration: 0.18)) { splashAtTarget = true }
@@ -245,10 +247,10 @@ struct GazeCalibrationView: View {
             withAnimation(.easeInOut(duration: 0.25)) {
                 currentIndex = currentIndex + 1
             }
-            // Reset EMA : la cible suivante implique un nouveau regard, on ne
-            // veut pas que le sample suivant soit contaminé par l'historique
-            // de la cible précédente.
+            // Reset EMA côté view (pour l'indicateur local) et côté calibrateur
+            // (pour que le sample suivant parte d'une fenêtre fraîche).
             emaInitialized = false
+            calibrator.resetEMA()
         }
     }
 }
@@ -270,13 +272,22 @@ private struct DiagnosticReadout: View {
     let calibrated: CGPoint
     let smoothed: CGPoint
     let canvas: CGSize
-    let scaleX: CGFloat
-    let scaleY: CGFloat
+    let isTrained: Bool
+    let isTraining: Bool
+    let trainingLoss: Double
+    let samplesCount: Int
     let blendH: CGFloat
     let blendV: CGFloat
     let pupilOffset: CGPoint
     let hasVision: Bool
     let visionPoint: CGPoint
+
+    private var mlpStatus: String {
+        if isTraining { return "mlp: entraînement en cours…" }
+        if isTrained  { return String(format: "mlp: entraîné (%d samples, loss=%.4f)", samplesCount, trainingLoss) }
+        let needed = max(0, 9 - samplesCount)
+        return "mlp: pas encore entraîné — \(needed) sample(s) manquant(s)"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -304,7 +315,8 @@ private struct DiagnosticReadout: View {
             HStack {
                 Text("canvas \(Int(canvas.width))×\(Int(canvas.height))")
                 Spacer()
-                Text(String(format: "gain x=%.2f y=%.2f", Double(scaleX), Double(scaleY)))
+                Text(mlpStatus)
+                    .foregroundStyle(isTrained ? Color.afsrSuccess.opacity(0.9) : .white.opacity(0.6))
             }
             .foregroundStyle(.white.opacity(0.6))
         }

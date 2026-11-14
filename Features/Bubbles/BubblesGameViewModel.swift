@@ -159,7 +159,7 @@ final class BubblesGameViewModel {
     @discardableResult
     private func recordCalibrationSample(actual: CGPoint) -> Bool {
         guard rawGazePoint != .zero else { return false }
-        calibrator.addSample(raw: rawGazePoint, actual: actual)
+        calibrator.addSample(target: actual)
         kalman.setCalibrationConfidence(sampleCount: calibrator.samplesCount)
         return true
     }

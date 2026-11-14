@@ -2,119 +2,205 @@ import Foundation
 import CoreGraphics
 import Observation
 
-/// Calibrateur du regard — modèle **quadratique par axe**.
+/// Calibrateur du regard — **version MLP personnalisé**.
 ///
-/// Pour chaque axe (x et y indépendamment) on apprend :
-/// ```
-/// ax = b₂ · (rx - μᵣ)² + b₁ · (rx - μᵣ) + μₐ
-/// ```
-/// où `μᵣ` est la moyenne des raw, `μₐ` la moyenne des actual.
+/// Remplace la régression quadratique par un petit réseau de neurones
+/// (`GazeMLP`, 2 couches cachées de 16 et 8 neurones, ReLU, sortie
+/// linéaire) entraîné sur les samples de calibration de l'utilisateur
+/// courant. Prend en entrée un vecteur de 9 features au lieu de juste
+/// les coordonnées ARKit — intégrer la pose de la tête, la position de
+/// la pupille Vision, et les blinks donne au modèle beaucoup plus
+/// d'informations pour apprendre le mapping personnel à cet enfant.
 ///
-/// **Pourquoi quadratique et pas affine ?** Le signal blendShape d'ARKit n'est
-/// pas linéaire en l'angle de regard : la combinaison `(outR + inL) - (outL + inR)`
-/// sature aux bords (les blendShapes individuels plafonnent à 1.0), donc le
-/// raw écran sous-estime les positions extrêmes — un fit purement linéaire
-/// compresse systématiquement le coin haut-gauche et le coin bas-droit vers
-/// le centre. Le terme `b₂·(rx-μ)²` corrige cette courbure.
+/// **Pipeline runtime** :
+/// 1. `ARFaceViewController` calcule les 9 features à chaque frame et
+///    appelle `updateFeatures(...)`.
+/// 2. Les game VMs appellent `apply(_ raw:)` (API inchangée pour la
+///    compat). Le paramètre `raw` est ignoré : le MLP fait son
+///    inférence sur le vecteur de features caché.
+/// 3. Si aucun modèle n'a encore été entraîné (< 9 samples), `apply`
+///    retourne `raw` — fallback vers la pipeline ARKit directe.
 ///
-/// **Pourquoi par axe et pas 2D ?** L'ajout de termes croisés (`rx·ry`, etc.)
-/// rend le système 6×6 mal conditionné dès qu'il y a la moindre corrélation
-/// parasite entre rx et ry, et OLS collapse vers la moyenne. Le modèle par
-/// axe est moins expressif (ne corrige pas la rotation) mais **structurellement
-/// incapable de collapse**.
+/// **Pipeline calibration** :
+/// 1. Chaque frame met à jour une EMA (α=0.10) des features pour
+///    lisser le bruit instantané.
+/// 2. Le tap du parent appelle `addSample(target:)` qui enregistre
+///    `(features EMA, position cible)`.
+/// 3. L'entraînement du MLP est relancé en arrière-plan (background
+///    queue) à chaque nouveau sample ≥ 9 : 500 epochs max, early stop
+///    à MSE < 0.0005, L2 regularization.
 ///
-/// **Centrage** : on fit en coordonnées centrées (rxc = rx - μᵣ, axc = ax - μₐ),
-/// ce qui élimine l'intercept et stabilise numériquement (les puissances 4
-/// de rx en valeur absolue sont ~10¹⁴ ; en centré, ~10⁸).
-///
-/// **Bornes de sécurité** : la pente effective au centre `b₁` est clampée à
-/// `[-20, -0.1] ∪ [0.1, 20]` pour éviter qu'un fit dégénéré ne renvoie
-/// l'identité ou n'amplifie à l'infini.
-///
-/// **Rejet d'outliers** : un premier fit, calcul des résidus, suppression
-/// des samples au-delà de `max(80 px, 3 × médiane)`, refit. Évite qu'un
-/// tap parent raté empoisonne la calibration.
+/// **Persistance** : seuls les samples sont sauvegardés en
+/// `UserDefaults`. Le modèle est ré-entraîné à chaque lancement de
+/// l'app depuis les samples persistés — garantit la compatibilité
+/// future si l'architecture du MLP change.
 @Observable
 final class GazeCalibrator {
     static let shared = GazeCalibrator()
 
+    /// Nombre fixe de features attendues. Doit matcher ce qu'envoie
+    /// `ARFaceViewController.updateFeatures(_:)`.
+    static let featureCount = 9
+
     struct Sample: Codable, Equatable {
-        let rx: Double; let ry: Double
-        let ax: Double; let ay: Double
+        let features: [Double]  // 9 valeurs
+        let target: [Double]    // 2 valeurs (x, y normalisées ∈ [0, 1])
     }
 
     private var samples: [Sample] = []
     private let maxSamples: Int
-    /// Bump v3 → v4 : la sortie d'ARFaceViewController est passée des
-    /// blendShapes saturés à un lancer de rayon 3D. Les anciens samples
-    /// (en pixels dérivés de h/v) n'ont plus de sens dans le nouveau
-    /// espace de raw (pixels dérivés du hit point géométrique).
-    private let persistenceKey = "afsr.eyegame.calibration.samples.v4"
+    /// Bump v4 → v5 : format storage changé (features vecteur 9D au lieu
+    /// du couple raw/actual en pixels).
+    private let persistenceKey = "afsr.eyegame.calibration.v5"
 
-    /// Paramètres ajustés par axe.
-    private struct AxisFit {
-        var meanR: Double = 0      // moyenne raw sur cet axe
-        var meanA: Double = 0      // moyenne actual sur cet axe
-        var b1: Double = 1         // pente effective au centre
-        var b2: Double = 0         // courbure quadratique
-    }
-    private var xFit = AxisFit()
-    private var yFit = AxisFit()
+    // Thread-safety : `mlp` est écrit en background (training), lu en
+    // main thread (inférence).
+    private let lock = NSLock()
+    private var mlp: GazeMLP?
 
-    /// Diagnostic / compat : pente effective au centre = `b₁`.
-    var m00: CGFloat { CGFloat(xFit.b1) }
-    var m11: CGFloat { CGFloat(yFit.b1) }
-    /// Termes croisés non utilisés dans ce modèle (gardés pour compat API).
-    var m01: CGFloat { 0 }
-    var m10: CGFloat { 0 }
-    var tx: CGFloat { CGFloat(xFit.meanA - xFit.b1 * xFit.meanR) }
-    var ty: CGFloat { CGFloat(yFit.meanA - yFit.b1 * yFit.meanR) }
+    // Features courantes, mises à jour à 60 Hz depuis le main thread.
+    private var _latestFeatures: [Double] = Array(repeating: 0, count: featureCount)
+    private var _canvasSize: CGSize = CGSize(width: 1, height: 1)
 
-    private let minGain: Double = 0.1
-    private let maxGain: Double = 20.0
-    /// Minimum d'échantillons avant d'appliquer la transformation. 5 = peu
-    /// au-dessus des 3 nécessaires pour un fit quadratique stable par axe.
-    private let minSamplesToApply: Int = 5
+    // EMA des features pour l'enregistrement des samples (plus propre
+    // qu'un instantané bruité).
+    private var _emaFeatures: [Double] = Array(repeating: 0, count: featureCount)
+    private var _emaInitialized = false
+    private let emaAlpha: Double = 0.10
+
+    private var _isTrained: Bool = false
+    private var _trainingLoss: Double = 0
+    private var _isTraining: Bool = false
+
+    // MARK: - API publique
+
+    var samplesCount: Int { samples.count }
+    /// `true` quand un modèle entraîné est disponible et utilisé.
+    var isTrained: Bool { _isTrained }
+    /// Dernière MSE de training (normalisée [0, 1] par axe).
+    var trainingLoss: Double { _trainingLoss }
+    /// `true` pendant qu'un training est en cours sur la background queue.
+    var isTraining: Bool { _isTraining }
+    /// Compat diagnostic : "gain x/y" n'a plus de sens en MLP, on
+    /// affiche une valeur indicative (0 = pas de modèle, 1 = modèle prêt).
+    var m00: CGFloat { _isTrained ? 1 : 0 }
+    var m11: CGFloat { _isTrained ? 1 : 0 }
 
     init(maxSamples: Int = 200) {
         self.maxSamples = maxSamples
         load()
-        recompute()
+        if samples.count >= 9 {
+            scheduleTraining()
+        }
     }
 
-    // MARK: - Public API
+    // MARK: - Features update (60 Hz)
 
-    var samplesCount: Int { samples.count }
+    /// Appelé par `ARFaceViewController` à chaque frame avec le vecteur de
+    /// features et la taille du canvas courant. Met à jour aussi l'EMA.
+    func updateFeatures(_ features: [Double], canvasSize: CGSize) {
+        guard features.count == Self.featureCount else { return }
+        _latestFeatures = features
+        _canvasSize = canvasSize
 
-    func addSample(raw: CGPoint, actual: CGPoint) {
-        samples.append(Sample(
-            rx: Double(raw.x), ry: Double(raw.y),
-            ax: Double(actual.x), ay: Double(actual.y)
-        ))
+        if _emaInitialized {
+            for i in 0..<features.count {
+                _emaFeatures[i] = emaAlpha * features[i] + (1 - emaAlpha) * _emaFeatures[i]
+            }
+        } else {
+            _emaFeatures = features
+            _emaInitialized = true
+        }
+    }
+
+    /// Reset l'EMA — à appeler entre cibles de calibration pour que le
+    /// sample N+1 ne soit pas contaminé par l'historique de la cible N.
+    func resetEMA() {
+        _emaInitialized = false
+    }
+
+    // MARK: - Inférence (appelée par les game VMs)
+
+    /// Retourne la position écran prédite par le MLP à partir du vecteur
+    /// de features courant. Le paramètre `raw` est gardé pour la
+    /// rétrocompat de l'API mais n'est utilisé que comme fallback tant
+    /// qu'aucun modèle n'est entraîné.
+    func apply(_ raw: CGPoint) -> CGPoint {
+        lock.lock()
+        let model = mlp
+        lock.unlock()
+        guard let model else { return raw }
+
+        let pred = model.predict(_latestFeatures)
+        let w = _canvasSize.width
+        let h = _canvasSize.height
+        return CGPoint(
+            x: CGFloat(pred[0]) * w,
+            y: CGFloat(pred[1]) * h
+        )
+    }
+
+    // MARK: - Calibration (appelée par la GazeCalibrationView)
+
+    /// Enregistre un sample en utilisant les features EMA actuelles et
+    /// la position écran de la cible (normalisée par le canvas).
+    func addSample(target: CGPoint) {
+        guard _emaInitialized else { return }
+        let normTarget = [
+            Double(target.x / _canvasSize.width),
+            Double(target.y / _canvasSize.height)
+        ]
+        samples.append(Sample(features: _emaFeatures, target: normTarget))
         if samples.count > maxSamples {
             samples.removeFirst(samples.count - maxSamples)
         }
-        recompute()
         save()
+
+        if samples.count >= 9 {
+            scheduleTraining()
+        }
     }
 
     func reset() {
         samples.removeAll()
-        xFit = AxisFit()
-        yFit = AxisFit()
+        lock.lock()
+        mlp = nil
+        lock.unlock()
+        _isTrained = false
+        _trainingLoss = 0
         save()
     }
 
-    func apply(_ raw: CGPoint) -> CGPoint {
-        guard samples.count >= minSamplesToApply else { return raw }
-        let rxc = Double(raw.x) - xFit.meanR
-        let ryc = Double(raw.y) - yFit.meanR
-        let predX = xFit.b2 * rxc * rxc + xFit.b1 * rxc + xFit.meanA
-        let predY = yFit.b2 * ryc * ryc + yFit.b1 * ryc + yFit.meanA
-        return CGPoint(x: predX, y: predY)
+    // MARK: - Training (background)
+
+    private func scheduleTraining() {
+        // Snapshot des samples pour entraîner sans tenir de lock côté main.
+        let batch = samples.map { (x: $0.features, y: $0.target) }
+        _isTraining = true
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            var model = GazeMLP(inputSize: Self.featureCount, outputSize: 2)
+            let lr = 0.05
+            let l2 = 0.001
+            let maxEpochs = 500
+            var lastLoss = 0.0
+            for _ in 0..<maxEpochs {
+                lastLoss = model.trainOneEpoch(samples: batch, learningRate: lr, l2: l2)
+                if lastLoss < 0.0005 { break }
+            }
+            self.lock.lock()
+            self.mlp = model
+            self.lock.unlock()
+            DispatchQueue.main.async { [weak self] in
+                self?._trainingLoss = lastLoss
+                self?._isTrained = true
+                self?._isTraining = false
+            }
+        }
     }
 
-    // MARK: - Persistence
+    // MARK: - Persistance
 
     private func save() {
         if let data = try? JSONEncoder().encode(samples) {
@@ -126,122 +212,9 @@ final class GazeCalibrator {
         guard let data = UserDefaults.standard.data(forKey: persistenceKey),
               let decoded = try? JSONDecoder().decode([Sample].self, from: data)
         else { return }
-        samples = decoded
+        samples = decoded.filter { $0.features.count == Self.featureCount && $0.target.count == 2 }
         if samples.count > maxSamples {
             samples = Array(samples.suffix(maxSamples))
         }
     }
-
-    // MARK: - Regression (per-axis quadratic OLS + outlier rejection)
-
-    private func recompute() {
-        guard samples.count >= minSamplesToApply else {
-            xFit = AxisFit()
-            yFit = AxisFit()
-            return
-        }
-
-        let p1x = fitAxis(samples, raw: \.rx, actual: \.ax)
-        let p1y = fitAxis(samples, raw: \.ry, actual: \.ay)
-        xFit = p1x
-        yFit = p1y
-
-        // Rejet d'outliers : besoin d'au moins 9 samples pour garder ≥ 5 après
-        // filtrage (minimum requis pour fitter à nouveau).
-        guard samples.count >= 9 else { return }
-
-        let residuals = samples.map { residual(of: $0) }
-        let sorted = residuals.sorted()
-        let median = sorted[sorted.count / 2]
-        let threshold = max(80.0, 3.0 * median)
-        let inliers = zip(samples, residuals)
-            .filter { $0.1 <= threshold }
-            .map { $0.0 }
-
-        if inliers.count >= minSamplesToApply {
-            xFit = fitAxis(inliers, raw: \.rx, actual: \.ax)
-            yFit = fitAxis(inliers, raw: \.ry, actual: \.ay)
-        }
-    }
-
-    @inline(__always)
-    private func residual(of s: Sample) -> Double {
-        let rxc = s.rx - xFit.meanR
-        let ryc = s.ry - yFit.meanR
-        let predX = xFit.b2 * rxc * rxc + xFit.b1 * rxc + xFit.meanA
-        let predY = yFit.b2 * ryc * ryc + yFit.b1 * ryc + yFit.meanA
-        let dx = predX - s.ax
-        let dy = predY - s.ay
-        return (dx * dx + dy * dy).squareRoot()
-    }
-
-    /// Fit quadratique sur un axe via OLS centré.
-    ///
-    /// Modèle : `axc = b₂·rxc² + b₁·rxc` (pas d'intercept, données centrées).
-    /// Équations normales 2×2 fermées :
-    /// ```
-    /// [Σrxc⁴  Σrxc³] [b₂]   [Σrxc²·axc]
-    /// [Σrxc³  Σrxc²] [b₁] = [Σrxc·axc ]
-    /// ```
-    private func fitAxis(_ samples: [Sample],
-                         raw: KeyPath<Sample, Double>,
-                         actual: KeyPath<Sample, Double>) -> AxisFit {
-        let n = Double(samples.count)
-        guard n >= Double(minSamplesToApply) else { return AxisFit() }
-
-        var meanR = 0.0, meanA = 0.0
-        for s in samples {
-            meanR += s[keyPath: raw]
-            meanA += s[keyPath: actual]
-        }
-        meanR /= n; meanA /= n
-
-        var s2 = 0.0, s3 = 0.0, s4 = 0.0
-        var sra = 0.0, s2ra = 0.0
-        for s in samples {
-            let rc = s[keyPath: raw] - meanR
-            let ac = s[keyPath: actual] - meanA
-            let rc2 = rc * rc
-            s2 += rc2
-            s3 += rc2 * rc
-            s4 += rc2 * rc2
-            sra += rc * ac
-            s2ra += rc2 * ac
-        }
-
-        // Données dégénérées (tous les rx identiques) → identité.
-        guard s2 > 1.0 else {
-            return AxisFit(meanR: meanR, meanA: meanA, b1: 1, b2: 0)
-        }
-
-        // Système 2×2 : [[s4, s3], [s3, s2]] · [b2, b1]ᵀ = [s2ra, sra]ᵀ
-        let det = s4 * s2 - s3 * s3
-        var b1: Double
-        var b2: Double
-        if abs(det) < 1.0 {
-            // Système quasi-singulier (rare) → on retombe sur le linéaire
-            // pur, c'est-à-dire b₁ = covariance / variance, b₂ = 0.
-            b2 = 0
-            b1 = sra / s2
-        } else {
-            let invDet = 1.0 / det
-            b2 = (s2 * s2ra - s3 * sra) * invDet
-            b1 = (s4 * sra - s3 * s2ra) * invDet
-        }
-
-        // Clamp magnitude de b1 (la pente au centre) avec préservation du signe :
-        // un gain trop petit collapse la sortie, un gain trop grand projette à
-        // l'infini. b2 (courbure) n'est pas borné — il est intrinsèquement
-        // petit grâce au centrage et la borne sur b1 suffit à garder l'output
-        // dans un range raisonnable.
-        let signedB1: Double = {
-            let sign = b1 < 0 ? -1.0 : 1.0
-            let mag = max(minGain, min(maxGain, abs(b1)))
-            return sign * mag
-        }()
-
-        return AxisFit(meanR: meanR, meanA: meanA, b1: signedB1, b2: b2)
-    }
 }
-
-
