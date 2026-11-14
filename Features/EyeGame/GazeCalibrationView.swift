@@ -34,6 +34,13 @@ struct GazeCalibrationView: View {
     @State private var blendH: CGFloat = 0
     @State private var blendV: CGFloat = 0
 
+    /// Point écran dérivé du pipeline Vision (VNDetectFaceLandmarksRequest
+    /// → position de la pupille → mapping écran). Comparé visuellement au
+    /// pipeline ARKit via un dot orange.
+    @State private var visionPoint: CGPoint = .zero
+    @State private var pupilOffset: CGPoint = .zero
+    @State private var hasVisionData: Bool = false
+
     private let normalizedPositions: [CGPoint] = [
         CGPoint(x: 0.15, y: 0.22), CGPoint(x: 0.50, y: 0.22), CGPoint(x: 0.85, y: 0.22),
         CGPoint(x: 0.15, y: 0.50), CGPoint(x: 0.50, y: 0.50), CGPoint(x: 0.85, y: 0.50),
@@ -82,22 +89,30 @@ struct GazeCalibrationView: View {
                     onGazeDiagnostic: { h, v in
                         blendH = h
                         blendV = v
+                    },
+                    onVisionGaze: { screen, offset, has in
+                        visionPoint = screen
+                        pupilOffset = offset
+                        hasVisionData = has
                     }
                 )
                 .allowsHitTesting(false)
                 .opacity(0.001)
 
-                // Overlay de diagnostic : trois points pour distinguer ce qui
-                // sort d'ARKit (rouge), ce qui sort du calibrateur (jaune) et
-                // ce que voit l'utilisateur (bleu, après Kalman). Si le point
-                // rouge ne bouge pas quand on bouge les yeux → problème ARKit.
-                // Si rouge bouge mais jaune pas → calibrateur. Si jaune bouge
-                // mais bleu très lent → Kalman trop lissant.
+                // Overlay de diagnostic : quatre points pour distinguer les
+                // étapes du pipeline ARKit (rouge, jaune, bleu) + le pipeline
+                // Vision (orange, pupille). On compare orange vs bleu pour
+                // décider si Vision est plus stable que ARKit.
                 DiagnosticDot(color: .red,    diameter: 14).position(rawGazePoint).allowsHitTesting(false)
                 DiagnosticDot(color: .yellow, diameter: 14).position(calibratedPoint).allowsHitTesting(false)
                 GazeIndicator()
                     .position(displayPoint)
                     .allowsHitTesting(false)
+                if hasVisionData {
+                    DiagnosticDot(color: .orange, diameter: 16)
+                        .position(visionPoint)
+                        .allowsHitTesting(false)
+                }
 
                 // Couche de capture des taps : sous les visuels (qui ne
                 // capturent rien) mais au-dessus de l'AR.
@@ -146,7 +161,10 @@ struct GazeCalibrationView: View {
                         scaleX: calibrator.m00,
                         scaleY: calibrator.m11,
                         blendH: blendH,
-                        blendV: blendV
+                        blendV: blendV,
+                        pupilOffset: pupilOffset,
+                        hasVision: hasVisionData,
+                        visionPoint: visionPoint
                     )
                     .padding(.horizontal, 24)
                     .padding(.bottom, 8)
@@ -256,14 +274,13 @@ private struct DiagnosticReadout: View {
     let scaleY: CGFloat
     let blendH: CGFloat
     let blendV: CGFloat
+    let pupilOffset: CGPoint
+    let hasVision: Bool
+    let visionPoint: CGPoint
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
-                // `blendH` / `blendV` portent ici lookAtCam.x et .y (en mètres),
-                // i.e. la position du regard sur le plan de la caméra. La
-                // valeur **x** correspond à l'axe long du device (vertical UI
-                // en portrait), la **y** au court (horizontal UI).
                 Text(String(format: "lookAtCam x=%+6.1f y=%+6.1f mm (x=vert, y=horiz UI)",
                             Double(blendH) * 1000, Double(blendV) * 1000))
                 Spacer()
@@ -272,6 +289,18 @@ private struct DiagnosticReadout: View {
             row(color: .red,    label: "raw",  pt: raw)
             row(color: .yellow, label: "cal",  pt: calibrated)
             row(color: .blue,   label: "out",  pt: smoothed)
+            if hasVision {
+                row(color: .orange, label: "vis",  pt: visionPoint)
+                HStack {
+                    Text(String(format: "pupil Δx=%+.3f Δy=%+.3f (eye-width units)",
+                                Double(pupilOffset.x), Double(pupilOffset.y)))
+                    Spacer()
+                }
+                .foregroundStyle(.orange.opacity(0.85))
+            } else {
+                Text("vision: en attente de la 1ère inférence…")
+                    .foregroundStyle(.orange.opacity(0.6))
+            }
             HStack {
                 Text("canvas \(Int(canvas.width))×\(Int(canvas.height))")
                 Spacer()
