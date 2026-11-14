@@ -2,6 +2,7 @@ import Foundation
 import Vision
 import CoreGraphics
 import CoreVideo
+import QuartzCore
 import os.log
 
 /// Cache thread-safe des offsets de pupille extraits par Vision.
