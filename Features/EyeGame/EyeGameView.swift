@@ -96,7 +96,6 @@ private struct ConfigurationView: View {
                 }
                 Section("Options") {
                     Toggle("Indicateur de regard", isOn: $viewModel.showGazeIndicator)
-                    Toggle("Musique de fond", isOn: $viewModel.musicEnabled)
                 }
                 Section {
                     Text("Tenez l'appareil face à l'enfant, à 30-60 cm. L'enfant regarde le personnage pour lui envoyer une tarte à la crème 🥧.")

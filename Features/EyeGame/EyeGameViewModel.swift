@@ -1,7 +1,7 @@
 import Foundation
 import CoreGraphics
 import Observation
-import AVFoundation
+import AudioToolbox
 import ARKit
 
 @Observable
@@ -17,7 +17,6 @@ final class EyeGameViewModel {
     var speed: GameSpeed = .normal
     var targetSize: TargetSize = .normal
     var showGazeIndicator: Bool = true
-    var musicEnabled: Bool = false
 
     // État de jeu
     var state: GameState = .configuration
@@ -39,7 +38,6 @@ final class EyeGameViewModel {
     let calibrator = GazeCalibrator.shared
     let kalman = GazeKalmanFilter()
     private var spawnedCount = 0
-    private var audioPlayer: AVAudioPlayer?
     private var moveTask: Task<Void, Never>?
 
     init() {
