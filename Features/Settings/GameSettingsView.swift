@@ -32,10 +32,10 @@ struct GameSettingsView: View {
                     Spacer()
                     Text(appVersion).foregroundStyle(.afsrTextSoft).monospacedDigit()
                 }
-                Link(destination: URL(string: "https://afsr.fr")!) {
+                Link(destination: AFSRLinks.website) {
                     Label("Site officiel AFSR", systemImage: "safari")
                 }
-                Link(destination: URL(string: "https://afsr.fr/nous-soutenir/faire-un-don")!) {
+                Link(destination: AFSRLinks.donation) {
                     Label("Soutenir l'AFSR", systemImage: "heart.fill")
                         .foregroundStyle(.afsrPrimaryAdaptive)
                 }

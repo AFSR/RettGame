@@ -5,6 +5,7 @@ import SwiftUI
 /// barre d'outils. Graphisme conforme à la charte AFSR (voir AFSRTheme).
 struct GameRootView: View {
     @State private var showSettings = false
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         NavigationStack {
@@ -34,6 +35,12 @@ struct GameRootView: View {
                         )
                     }
                     .buttonStyle(.plain)
+
+                    AFSRSecondaryButton(title: "Faire un don à l'AFSR", icon: "heart.fill") {
+                        openURL(AFSRLinks.donation)
+                    }
+                    .accessibilityHint("Ouvre la page de don du site de l'AFSR dans le navigateur")
+                    .padding(.top, 8)
                 }
                 // Largeur de lecture limitée : sur iPad les cartes ne s'étirent pas sur tout l'écran.
                 .frame(maxWidth: 640)

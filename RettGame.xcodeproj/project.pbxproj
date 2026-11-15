@@ -36,6 +36,7 @@
 		700726ED5D98ECC5D6914DB1 /* Unbounded-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 855443C9D87E63830BB955A9 /* Unbounded-Bold.ttf */; };
 		F85856585437A79FC2B790A7 /* OFL-Montserrat.txt in Resources */ = {isa = PBXBuildFile; fileRef = 9C88FEDED7B02E56B27AB2AF /* OFL-Montserrat.txt */; };
 		722B65BD8780DDFA2C07C5F6 /* OFL-Unbounded.txt in Resources */ = {isa = PBXBuildFile; fileRef = CDDBFDEDF39B837043EDF1A0 /* OFL-Unbounded.txt */; };
+		07737E78578A633566F1CE22 /* AFSRLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD910238E9E4F4D89518659E /* AFSRLinks.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -71,6 +72,7 @@
 		855443C9D87E63830BB955A9 /* Unbounded-Bold.ttf */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file; path = Unbounded-Bold.ttf; sourceTree = "<group>"; };
 		9C88FEDED7B02E56B27AB2AF /* OFL-Montserrat.txt */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = OFL-Montserrat.txt; sourceTree = "<group>"; };
 		CDDBFDEDF39B837043EDF1A0 /* OFL-Unbounded.txt */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = OFL-Unbounded.txt; sourceTree = "<group>"; };
+		BD910238E9E4F4D89518659E /* AFSRLinks.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AFSRLinks.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -97,6 +99,7 @@
 		5CE3F3C675BDA9BE49737B31 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				BD910238E9E4F4D89518659E /* AFSRLinks.swift */,
 				76DD8EBAC6B4F1877E4C264A /* Components */,
 				C0C581DE43FBDC003D641F06 /* Theme */,
 			);
@@ -322,6 +325,7 @@
 				C4075EBCDD77CE8FFACCFD80 /* GameRootView.swift in Sources */,
 				3B8A8E68E11AF109B71F6234 /* RettGameApp.swift in Sources */,
 				FF73F443C49265428EF0F18D /* AFSRButton.swift in Sources */,
+				07737E78578A633566F1CE22 /* AFSRLinks.swift in Sources */,
 				E090F02EBAF387AB0B09C9F9 /* AFSRTheme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
