@@ -13,6 +13,7 @@ import QuartzCore
 /// couleurs, halo pulsant), le reste est discret pour ne pas distraire le regard.
 struct GazeCalibrationView: View {
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(EyeGameSettings.diagnosticKey) private var showDiagnostic = false
 
     private let calibrator = GazeCalibrator.shared
     @State private var kalman = GazeKalmanFilter()
@@ -58,6 +59,7 @@ struct GazeCalibrationView: View {
                         displayPoint = kalman.filter(measurement: calibrated)
                     },
                     onFeatures: { values in
+                        guard showDiagnostic else { return }
                         // Le HUD n'a pas besoin du 60 Hz : on limite les invalidations de la vue.
                         let now = CACurrentMediaTime()
                         if now - lastFeaturesUpdate > 0.1 {
@@ -72,8 +74,10 @@ struct GazeCalibrationView: View {
                 // Diagnostic : rouge = estimation ARKit brute, jaune = après calibration,
                 // bleu = sortie finale (après Kalman). Rouge et jaune sont superposés tant
                 // que la calibration n'est pas entraînée.
-                DiagnosticDot(color: .red, diameter: 14).position(rawGazePoint).allowsHitTesting(false)
-                DiagnosticDot(color: .yellow, diameter: 14).position(calibratedPoint).allowsHitTesting(false)
+                if showDiagnostic {
+                    DiagnosticDot(color: .red, diameter: 14).position(rawGazePoint).allowsHitTesting(false)
+                    DiagnosticDot(color: .yellow, diameter: 14).position(calibratedPoint).allowsHitTesting(false)
+                }
                 GazeIndicator()
                     .position(displayPoint)
                     .allowsHitTesting(false)
@@ -112,19 +116,21 @@ struct GazeCalibrationView: View {
 
                     Spacer()
 
-                    DiagnosticReadout(
-                        raw: rawGazePoint,
-                        calibrated: calibratedPoint,
-                        smoothed: displayPoint,
-                        canvas: geo.size,
-                        features: features,
-                        samplesCount: calibrator.samplesCount,
-                        minimumSamples: minimumSamples,
-                        isTrained: calibrator.isTrained,
-                        report: calibrator.report
-                    )
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 8)
+                    if showDiagnostic {
+                        DiagnosticReadout(
+                            raw: rawGazePoint,
+                            calibrated: calibratedPoint,
+                            smoothed: displayPoint,
+                            canvas: geo.size,
+                            features: features,
+                            samplesCount: calibrator.samplesCount,
+                            minimumSamples: minimumSamples,
+                            isTrained: calibrator.isTrained,
+                            report: calibrator.report
+                        )
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 8)
+                    }
 
                     if showRejectedFeedback {
                         FeedbackBanner(

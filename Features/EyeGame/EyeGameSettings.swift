@@ -5,6 +5,8 @@ import Foundation
 enum EyeGameSettings {
     static let smoothingEnabledKey = "afsr.eyegame.smoothing.enabled"
     static let smoothingStrengthKey = "afsr.eyegame.smoothing.strength"
+    /// Affiche des mesures techniques pendant la calibration (désactivé par défaut).
+    static let diagnosticKey = "afsr.eyegame.diagnostic"
 
     static let defaultSmoothingStrength: Double = 0.4
 }

@@ -8,6 +8,8 @@ struct EyeGameSettingsSection: View {
     @AppStorage(EyeGameSettings.smoothingEnabledKey) private var smoothingEnabled: Bool = true
     @AppStorage(EyeGameSettings.smoothingStrengthKey) private var smoothingStrength: Double = EyeGameSettings.defaultSmoothingStrength
 
+    @AppStorage(EyeGameSettings.diagnosticKey) private var diagnosticEnabled: Bool = false
+
     @State private var showResetConfirm = false
 
     var body: some View {
@@ -35,6 +37,10 @@ struct EyeGameSettingsSection: View {
                 .padding(.vertical, 4)
             }
 
+            Toggle(isOn: $diagnosticEnabled) {
+                Label("Mode diagnostic", systemImage: "waveform.path.ecg")
+            }
+
             Button(role: .destructive) {
                 showResetConfirm = true
             } label: {
@@ -43,7 +49,7 @@ struct EyeGameSettingsSection: View {
         } header: {
             Text("Jeu du Regard")
         } footer: {
-            Text("La calibration est conservée entre les parties. Si le point du regard devient imprécis, relancez quelques taps ou réinitialisez la calibration.")
+            Text("La calibration est conservée entre les parties. Si le point du regard devient imprécis, relancez quelques taps ou réinitialisez la calibration. Le mode diagnostic affiche des mesures techniques pendant la calibration.")
         }
         .confirmationDialog(
             "Réinitialiser la calibration du regard ?",

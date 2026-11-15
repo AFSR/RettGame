@@ -16,7 +16,7 @@ struct GameSettingsView: View {
 
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("Le jeu utilise la caméra TrueDepth (Face ID) pour suivre le regard de votre enfant.", systemImage: "faceid")
+                    Label("Le jeu utilise la caméra frontale pour suivre le regard de votre enfant.", systemImage: "eye")
                     Label("Aucune image n'est enregistrée ni transmise.", systemImage: "lock.shield.fill")
                     Label("La calibration est conservée localement entre les parties.", systemImage: "scope")
                 }

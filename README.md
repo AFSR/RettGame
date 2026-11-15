@@ -10,8 +10,8 @@ rapports). Le jeu du regard a un public et un usage radicalement différents :
 
 - **Public** : l'enfant lui-même, encadré par un adulte
 - **UX** : plein écran, mode jeu, pas de menus
-- **Capabilities** : caméra TrueDepth uniquement, pas d'iCloud, pas de HealthKit, pas
-  de Sign in with Apple
+- **Capabilities** : caméra frontale uniquement (suivi du visage ARKit), pas d'iCloud,
+  pas de HealthKit, pas de Sign in with Apple
 - **Cycle de vie indépendant** : peut évoluer (nouveaux mini-jeux) sans toucher à RettApp
 
 Mélanger les deux dans une même app rendait l'expérience confuse pour les deux types
@@ -21,8 +21,10 @@ d'utilisateurs.
 
 - 🎯 Jeu de la « tarte à la crème » — l'enfant fixe un personnage, une tarte lui arrive
   dessus, gratification visuelle/sonore
-- 📐 Suivi du regard via les blendShapes TrueDepth (Face ID)
-- 🎚️ Calibration tap-based + filtre Kalman réglable depuis les Réglages
+- 🫧 Jeu des « bulles colorées » — l'enfant fait éclater les bulles en les regardant
+- 📐 Suivi du regard via ARKit (point de fixation + coefficients oculaires)
+- 🎚️ Calibration guidée (régression ridge personnalisée) + filtre Kalman réglable depuis
+  les Réglages ; mode diagnostic optionnel
 
 ## Stack
 

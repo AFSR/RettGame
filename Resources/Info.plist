@@ -54,7 +54,7 @@
     <key>NSCameraUsageDescription</key>
     <string>La caméra frontale est utilisée pour détecter le regard de votre enfant dans le jeu. Aucune image n'est enregistrée ni transmise.</string>
     <key>NSFaceIDUsageDescription</key>
-    <string>Le jeu de regard utilise la caméra TrueDepth (Face ID) pour suivre les yeux de votre enfant. Aucune donnée biométrique n'est conservée.</string>
+    <string>Le jeu de regard utilise la caméra frontale pour suivre les yeux de votre enfant. Aucune donnée biométrique n'est conservée.</string>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoads</key>

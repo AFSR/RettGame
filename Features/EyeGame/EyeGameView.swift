@@ -41,7 +41,7 @@ private struct UnsupportedView: View {
                 .foregroundStyle(.afsrPurpleLight)
             Text("Appareil non compatible")
                 .font(AFSRFont.headline())
-            Text("Le jeu de regard nécessite un iPhone X ou un iPad Pro avec caméra TrueDepth Face ID. Votre appareil n'est pas compatible.")
+            Text("Le jeu de regard nécessite un appareil dont la caméra frontale prend en charge le suivi du visage (iPhone X ou plus récent, iPad avec puce A12 ou plus récente). Votre appareil n'est pas compatible.")
                 .font(AFSRFont.body())
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
