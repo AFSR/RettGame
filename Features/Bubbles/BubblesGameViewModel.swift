@@ -28,13 +28,14 @@ struct Bubble: Identifiable, Equatable {
 }
 
 enum BubblesPalette {
+    /// Couleurs de la charte AFSR : magenta-90, lime-100, purple-90, green-100, yellow-100, violet-90.
     static let colors: [Color] = [
-        Color(hex: "#FF6F61"),
-        Color(hex: "#7B89FF"),
-        Color(hex: "#FFD166"),
-        Color(hex: "#06D6A0"),
-        Color(hex: "#EF476F"),
-        Color(hex: "#118AB2"),
+        Color(hex: "#ae3f96"),
+        Color(hex: "#afcb27"),
+        Color(hex: "#814992"),
+        Color(hex: "#54b366"),
+        Color(hex: "#dedc00"),
+        Color(hex: "#5f4a84"),
     ]
     static func color(at index: Int) -> Color {
         colors[((index % colors.count) + colors.count) % colors.count]

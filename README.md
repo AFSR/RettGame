@@ -26,6 +26,15 @@ d'utilisateurs.
 - 🎚️ Calibration guidée (régression ridge personnalisée) + filtre Kalman réglable depuis
   les Réglages ; mode diagnostic optionnel
 
+## Charte graphique
+
+L'interface suit la charte AFSR v1.3 (dépôt `AFSR/charte_graphique`) : couleurs de marque
+(magenta `#9e1981`, texte violet `#3f266c`, fond `#fbf6fa`), polices Unbounded (titres) et
+Montserrat (texte), logo officiel. Tout est centralisé dans `Shared/Theme/AFSRTheme.swift`.
+Les polices (`Resources/Fonts`, licence SIL OFL jointe) sont des instances statiques générées
+à partir des polices variables de la charte. La charte ne définit pas de thème sombre : les
+variantes sombres en sont dérivées.
+
 ## Stack
 
 - iOS 17+, SwiftUI, ARKit (`ARFaceTrackingConfiguration`)

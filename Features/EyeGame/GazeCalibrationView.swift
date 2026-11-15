@@ -44,9 +44,9 @@ struct GazeCalibrationView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                // Fond sombre légèrement bleuté : repose l'œil et fait ressortir la cible.
+                // Fond violet nuit (violet-140 → violet-120) : repose l'œil et fait ressortir la cible.
                 LinearGradient(
-                    colors: [Color(hex: "#0F1726"), Color(hex: "#1B2438")],
+                    colors: [Color.afsrVioletDeep, Color.afsrVioletNight],
                     startPoint: .top, endPoint: .bottom
                 )
                 .ignoresSafeArea()
@@ -72,7 +72,7 @@ struct GazeCalibrationView: View {
                 .opacity(0.001)
 
                 // Diagnostic : rouge = estimation ARKit brute, jaune = après calibration,
-                // bleu = sortie finale (après Kalman). Rouge et jaune sont superposés tant
+                // blanc = sortie finale (après Kalman). Rouge et jaune sont superposés tant
                 // que la calibration n'est pas entraînée.
                 if showDiagnostic {
                     DiagnosticDot(color: .red, diameter: 14).position(rawGazePoint).allowsHitTesting(false)
@@ -87,7 +87,7 @@ struct GazeCalibrationView: View {
                     .contentShape(Rectangle())
                     .onTapGesture { handleTap() }
 
-                BigTarget(diameter: 180, pulsing: pulse, splashing: splashAtTarget)
+                BigTarget(diameter: targetDiameter(in: geo.size), pulsing: pulse, splashing: splashAtTarget)
                     .position(currentPosition(in: geo.size))
                     .allowsHitTesting(false)
 
@@ -148,7 +148,7 @@ struct GazeCalibrationView: View {
                         // La précision continue de s'améliorer jusqu'à ~18 points.
                         if calibrator.samplesCount < 18 {
                             Text("Continuez : précision améliorée jusqu'à ~18 points")
-                                .font(AFSRFont.caption(11))
+                                .font(AFSRFont.caption(12))
                                 .foregroundStyle(.white.opacity(0.55))
                                 .padding(.bottom, 4)
                         }
@@ -156,10 +156,11 @@ struct GazeCalibrationView: View {
                             dismiss()
                         } label: {
                             Label("Terminer", systemImage: "checkmark")
-                                .font(AFSRFont.headline(15))
+                                .font(AFSRFont.button(15))
                                 .foregroundStyle(.white)
-                                .padding(.horizontal, 20).padding(.vertical, 12)
-                                .background(Color.afsrSuccess.opacity(0.85), in: Capsule())
+                                .padding(.horizontal, 22).padding(.vertical, 12)
+                                .background(Color.afsrPrimary, in: Capsule())
+                                .overlay(Capsule().stroke(Color.afsrPrimaryBorder, lineWidth: 1))
                         }
                         .padding(.bottom, geo.safeAreaInsets.bottom + 16)
                     } else {
@@ -179,6 +180,12 @@ struct GazeCalibrationView: View {
         .ignoresSafeArea()
         .statusBarHidden(true)
         .navigationBarBackButtonHidden(true)
+    }
+
+    /// 180 pt sur iPad ; réduite sur iPhone, où une cible de 180 pt centrée à 15 % du bord
+    /// déborderait de l'écran.
+    private func targetDiameter(in size: CGSize) -> CGFloat {
+        min(180, max(110, min(size.width, size.height) * 0.28))
     }
 
     private func currentPosition(in size: CGSize) -> CGPoint {
@@ -253,7 +260,7 @@ private struct DiagnosticReadout: View {
                 .foregroundStyle(.white.opacity(0.85))
             row(color: .red, label: "raw", pt: raw)
             row(color: .yellow, label: "cal", pt: calibrated)
-            row(color: .blue, label: "out", pt: smoothed)
+            row(color: .white, label: "out", pt: smoothed)
             Text("fenêtre \(Int(canvas.width))×\(Int(canvas.height))")
                 .foregroundStyle(.white.opacity(0.6))
             Text(modelLine)
@@ -278,10 +285,10 @@ private struct DiagnosticReadout: View {
 private struct GazeIndicator: View {
     var body: some View {
         Circle()
-            .fill(Color.blue.opacity(0.45))
+            .fill(Color.white.opacity(0.9))
             .frame(width: 18, height: 18)
-            .overlay(Circle().stroke(Color.white.opacity(0.7), lineWidth: 1.5))
-            .shadow(color: .blue.opacity(0.4), radius: 4)
+            .overlay(Circle().stroke(Color.afsrPrimary, lineWidth: 3))
+            .shadow(color: Color.afsrPrimary.opacity(0.6), radius: 6)
             .accessibilityHidden(true)
     }
 }
@@ -298,8 +305,8 @@ private struct BigTarget: View {
                 .fill(
                     RadialGradient(
                         colors: [
-                            Color(hex: "#FFD93D").opacity(0.35),
-                            Color(hex: "#FFD93D").opacity(0),
+                            Color.afsrYellow.opacity(0.35),
+                            Color.afsrYellow.opacity(0),
                         ],
                         center: .center,
                         startRadius: diameter * 0.4,
@@ -311,7 +318,7 @@ private struct BigTarget: View {
                 .animation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true), value: pulsing)
 
             Circle()
-                .stroke(Color(hex: "#FFD93D"), lineWidth: 6)
+                .stroke(Color.afsrYellow, lineWidth: 6)
                 .frame(width: diameter + 36, height: diameter + 36)
                 .scaleEffect(pulsing ? 1.10 : 0.96)
                 .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulsing)
@@ -319,7 +326,7 @@ private struct BigTarget: View {
             Circle()
                 .fill(
                     RadialGradient(
-                        colors: [Color(hex: "#FF8C42"), Color(hex: "#E83A3A")],
+                        colors: [Color.afsrYellowBright, Color.afsrLime],
                         center: .topLeading,
                         startRadius: 8,
                         endRadius: diameter
@@ -327,7 +334,7 @@ private struct BigTarget: View {
                 )
                 .frame(width: diameter, height: diameter)
                 .overlay(Circle().stroke(Color.white.opacity(0.7), lineWidth: 3))
-                .shadow(color: Color(hex: "#FFD93D").opacity(0.6), radius: 24)
+                .shadow(color: Color.afsrYellow.opacity(0.6), radius: 24)
                 .scaleEffect(splashing ? 1.25 : 1.0)
                 .opacity(splashing ? 0.55 : 1.0)
 

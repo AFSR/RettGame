@@ -24,14 +24,14 @@ struct EyeGameSettingsSection: View {
                         Text("Force du lissage")
                         Spacer()
                         Text("\(Int(smoothingStrength * 100)) %")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.afsrTextSoft)
                             .monospacedDigit()
                     }
                     Slider(value: $smoothingStrength, in: 0...1)
                     HStack {
-                        Text("Réactif").font(AFSRFont.caption()).foregroundStyle(.secondary)
+                        Text("Réactif").font(AFSRFont.caption()).foregroundStyle(.afsrTextSoft)
                         Spacer()
-                        Text("Lisse").font(AFSRFont.caption()).foregroundStyle(.secondary)
+                        Text("Lisse").font(AFSRFont.caption()).foregroundStyle(.afsrTextSoft)
                     }
                 }
                 .padding(.vertical, 4)

@@ -28,6 +28,14 @@
 		E617D1BB6FD2463D2836DE6D /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 606CB75D38D59C55A9DD1AA5 /* Foundation.framework */; };
 		EFC10E35BDADDFEF5FE06C50 /* GameSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBB4E0A595D1A16DC8D2F4A3 /* GameSettingsView.swift */; };
 		FF73F443C49265428EF0F18D /* AFSRButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4962CFBA2F4EB94126300799 /* AFSRButton.swift */; };
+		076527D9F64962DFFF200AA7 /* Montserrat-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = BC9464BBB5DE917E71502B31 /* Montserrat-Regular.ttf */; };
+		55B77E64393FA3F11AFCF022 /* Montserrat-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 3986C0535906612A1664103B /* Montserrat-Medium.ttf */; };
+		B1C4CCBB913061B5368A53F2 /* Montserrat-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 7B54C31BAB094008E8EC2958 /* Montserrat-SemiBold.ttf */; };
+		6EF7D5E0A18C55AC1D7EAD23 /* Montserrat-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 998B82A2863C7C8F3BB19648 /* Montserrat-Bold.ttf */; };
+		FE9BF078D8427057A4188542 /* Unbounded-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 0ED3F05B7872261098E870BE /* Unbounded-SemiBold.ttf */; };
+		700726ED5D98ECC5D6914DB1 /* Unbounded-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 855443C9D87E63830BB955A9 /* Unbounded-Bold.ttf */; };
+		F85856585437A79FC2B790A7 /* OFL-Montserrat.txt in Resources */ = {isa = PBXBuildFile; fileRef = 9C88FEDED7B02E56B27AB2AF /* OFL-Montserrat.txt */; };
+		722B65BD8780DDFA2C07C5F6 /* OFL-Unbounded.txt in Resources */ = {isa = PBXBuildFile; fileRef = CDDBFDEDF39B837043EDF1A0 /* OFL-Unbounded.txt */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -55,6 +63,14 @@
 		D4F9E8B6A1C2334455660020 /* GazeRidgeModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GazeRidgeModel.swift; sourceTree = "<group>"; };
 		B0BB1ECCAFE0000000000002 /* BubblesGameView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BubblesGameView.swift; sourceTree = "<group>"; };
 		B0BB1ECCAFE0000000000004 /* BubblesGameViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BubblesGameViewModel.swift; sourceTree = "<group>"; };
+		BC9464BBB5DE917E71502B31 /* Montserrat-Regular.ttf */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file; path = Montserrat-Regular.ttf; sourceTree = "<group>"; };
+		3986C0535906612A1664103B /* Montserrat-Medium.ttf */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file; path = Montserrat-Medium.ttf; sourceTree = "<group>"; };
+		7B54C31BAB094008E8EC2958 /* Montserrat-SemiBold.ttf */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file; path = Montserrat-SemiBold.ttf; sourceTree = "<group>"; };
+		998B82A2863C7C8F3BB19648 /* Montserrat-Bold.ttf */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file; path = Montserrat-Bold.ttf; sourceTree = "<group>"; };
+		0ED3F05B7872261098E870BE /* Unbounded-SemiBold.ttf */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file; path = Unbounded-SemiBold.ttf; sourceTree = "<group>"; };
+		855443C9D87E63830BB955A9 /* Unbounded-Bold.ttf */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file; path = Unbounded-Bold.ttf; sourceTree = "<group>"; };
+		9C88FEDED7B02E56B27AB2AF /* OFL-Montserrat.txt */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = OFL-Montserrat.txt; sourceTree = "<group>"; };
+		CDDBFDEDF39B837043EDF1A0 /* OFL-Unbounded.txt */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = OFL-Unbounded.txt; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -187,12 +203,28 @@
 			isa = PBXGroup;
 			children = (
 				2C080EDEB2C7A951B7BDF9D7 /* Assets.xcassets */,
+				A5BF680499537EF004657006 /* Fonts */,
 				6BB8D061CF7CDBB5CF33EC4D /* Localizable.strings */,
 				3C64368F6E2568A1E27822E4 /* LaunchScreen.storyboard */,
 				E0435A5A487B7F3B4999FB48 /* Info.plist */,
 				75EE57DFA053FF2ED8766472 /* RettGame.entitlements */,
 			);
 			path = Resources;
+			sourceTree = "<group>";
+		};
+		A5BF680499537EF004657006 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				BC9464BBB5DE917E71502B31 /* Montserrat-Regular.ttf */,
+				3986C0535906612A1664103B /* Montserrat-Medium.ttf */,
+				7B54C31BAB094008E8EC2958 /* Montserrat-SemiBold.ttf */,
+				998B82A2863C7C8F3BB19648 /* Montserrat-Bold.ttf */,
+				0ED3F05B7872261098E870BE /* Unbounded-SemiBold.ttf */,
+				855443C9D87E63830BB955A9 /* Unbounded-Bold.ttf */,
+				9C88FEDED7B02E56B27AB2AF /* OFL-Montserrat.txt */,
+				CDDBFDEDF39B837043EDF1A0 /* OFL-Unbounded.txt */,
+			);
+			path = Fonts;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -256,6 +288,14 @@
 				529CC841ED16FDD0D03D16D6 /* Assets.xcassets in Resources */,
 				6A5D5EB9AC7818E88732DCE2 /* Localizable.strings in Resources */,
 				E55E0ABD6E02D5DFC6F2815F /* LaunchScreen.storyboard in Resources */,
+				076527D9F64962DFFF200AA7 /* Montserrat-Regular.ttf in Resources */,
+				55B77E64393FA3F11AFCF022 /* Montserrat-Medium.ttf in Resources */,
+				B1C4CCBB913061B5368A53F2 /* Montserrat-SemiBold.ttf in Resources */,
+				6EF7D5E0A18C55AC1D7EAD23 /* Montserrat-Bold.ttf in Resources */,
+				FE9BF078D8427057A4188542 /* Unbounded-SemiBold.ttf in Resources */,
+				700726ED5D98ECC5D6914DB1 /* Unbounded-Bold.ttf in Resources */,
+				F85856585437A79FC2B790A7 /* OFL-Montserrat.txt in Resources */,
+				722B65BD8780DDFA2C07C5F6 /* OFL-Unbounded.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

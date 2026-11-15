@@ -38,13 +38,13 @@ private struct UnsupportedView: View {
         VStack(spacing: 16) {
             Image(systemName: "eye.slash")
                 .font(.system(size: 56))
-                .foregroundStyle(.afsrPurpleLight)
+                .foregroundStyle(.afsrPrimaryAdaptive)
             Text("Appareil non compatible")
                 .font(AFSRFont.headline())
             Text("Le jeu de regard nécessite un appareil dont la caméra frontale prend en charge le suivi du visage (iPhone X ou plus récent, iPad avec puce A12 ou plus récente). Votre appareil n'est pas compatible.")
                 .font(AFSRFont.body())
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.afsrTextSoft)
                 .padding()
         }
         .padding()
@@ -101,9 +101,11 @@ private struct ConfigurationView: View {
                 Section {
                     Text("Tenez l'appareil face à l'enfant, à 30-60 cm. L'enfant regarde le personnage pour lui envoyer une tarte à la crème 🥧.")
                         .font(AFSRFont.caption())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.afsrTextSoft)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.afsrBackground)
 
             AFSRPrimaryButton(title: "Lancer la partie", icon: "play.fill") {
                 viewModel.launchPlaying()
@@ -111,7 +113,7 @@ private struct ConfigurationView: View {
             .disabled(!viewModel.hasCalibration)
             .opacity(viewModel.hasCalibration ? 1 : 0.5)
             .padding()
-            .background(Color(.systemBackground))
+            .background(Color.afsrBackground)
         }
         .fullScreenCover(isPresented: $showCalibration) {
             GazeCalibrationView()
@@ -131,15 +133,16 @@ private struct CalibrationRow: View {
                 .foregroundStyle(isCalibrated ? Color.afsrSuccess : Color.afsrEmergency)
             VStack(alignment: .leading, spacing: 2) {
                 Text(isCalibrated ? "Calibré" : "Non calibré")
-                    .font(AFSRFont.headline())
+                    .font(AFSRFont.headline(16))
                 Text("\(sampleCount) point\(sampleCount > 1 ? "s" : "") enregistré\(sampleCount > 1 ? "s" : "")")
                     .font(AFSRFont.caption())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.afsrTextSoft)
             }
             Spacer()
             Button(isCalibrated ? "Recalibrer" : "Calibrer", action: onCalibrate)
                 .buttonStyle(.borderedProminent)
-                .tint(.afsrPurpleAdaptive)
+                .tint(.afsrPrimary)
+                .font(AFSRFont.button(15))
         }
         .padding(.vertical, 4)
     }
@@ -156,7 +159,7 @@ private struct PlayingView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                Color.black.opacity(0.02).ignoresSafeArea()
+                Color.afsrBackground.ignoresSafeArea()
 
                 // Capture ARKit en arrière-plan (caméra masquée)
                 ARFaceView { point in
@@ -191,8 +194,9 @@ private struct PlayingView: View {
                     }
                     if viewModel.showGazeIndicator {
                         Circle()
-                            .fill(Color.afsrPurple.opacity(0.4))
+                            .fill(Color.afsrViolet.opacity(0.55))
                             .frame(width: 20, height: 20)
+                            .overlay(Circle().stroke(Color.white.opacity(0.9), lineWidth: 2))
                             .position(viewModel.lastGazePoint)
                     }
                 }
@@ -202,7 +206,8 @@ private struct PlayingView: View {
                     HStack {
                         Button("Quitter") { viewModel.reset() }
                             .buttonStyle(.borderedProminent)
-                            .tint(.afsrPurpleAdaptive)
+                            .tint(.afsrPrimary)
+                            .font(AFSRFont.button(15))
                         Spacer()
                         CalibrationBadge(count: viewModel.calibrator.samplesCount) {
                             viewModel.resetCalibration()
@@ -214,7 +219,7 @@ private struct PlayingView: View {
                     Spacer()
                     Text("Touchez le personnage quand votre enfant le regarde — cela calibre le suivi du regard.")
                         .font(AFSRFont.caption())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.afsrTextSoft)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
                         .padding(.bottom, 16 + geo.safeAreaInsets.bottom)
@@ -251,11 +256,11 @@ private struct TargetView: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(Color.afsrPurple.opacity(0.3), lineWidth: 6)
+                .stroke(Color.afsrPrimary.opacity(0.3), lineWidth: 6)
                 .frame(width: target.diameter + 16, height: target.diameter + 16)
             Circle()
                 .trim(from: 0, to: CGFloat(progress))
-                .stroke(Color.afsrPurple, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                .stroke(Color.afsrPrimary, style: StrokeStyle(lineWidth: 6, lineCap: .round))
                 .frame(width: target.diameter + 16, height: target.diameter + 16)
                 .rotationEffect(.degrees(-90))
                 .animation(.linear(duration: 0.1), value: progress)
@@ -290,8 +295,8 @@ private struct ScoreBadge: View {
     let score: Int
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "star.fill").foregroundStyle(.yellow)
-            Text("\(score)").font(AFSRFont.headline())
+            Image(systemName: "star.fill").foregroundStyle(Color.afsrPrimary)
+            Text("\(score)").font(AFSRFont.number())
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(.ultraThinMaterial, in: Capsule())
@@ -308,9 +313,9 @@ private struct CalibrationBadge: View {
 
     private var status: (icon: String, color: Color, label: String) {
         switch count {
-        case 0:    return ("scope", .orange, "Non calibré")
-        case 1:    return ("scope", .orange, "1 pt")
-        case 2...4: return ("scope", .yellow, "\(count) pts")
+        case 0:    return ("scope", .afsrEmergency, "Non calibré")
+        case 1:    return ("scope", .afsrEmergency, "1 pt")
+        case 2...4: return ("scope", .afsrWarning, "\(count) pts")
         default:   return ("scope", .afsrSuccess, "\(count) pts")
         }
     }
@@ -336,7 +341,7 @@ private struct CalibrationBadge: View {
                     Text(status.label).font(AFSRFont.caption())
                     Image(systemName: "chevron.down")
                         .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.afsrTextSoft)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
                 .background(.ultraThinMaterial, in: Capsule())
@@ -382,10 +387,14 @@ private struct FinishedView: View {
             Text("🎉")
                 .font(.system(size: 120))
             Text(childName.isEmpty ? "Bravo !" : "Bravo \(childName) !")
-                .font(AFSRFont.title(36))
+                .font(AFSRFont.title(32))
+                .lineLimit(2)
+                .minimumScaleFactor(0.6)
+                .multilineTextAlignment(.center)
             Text("Tu as visé \(score) fois sur \(total) !")
-                .font(AFSRFont.headline())
-                .foregroundStyle(.secondary)
+                .font(AFSRFont.headline(16))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.afsrTextSoft)
             Spacer()
             AFSRPrimaryButton(title: "Rejouer", icon: "arrow.clockwise", action: onRestart)
                 .padding(.horizontal)

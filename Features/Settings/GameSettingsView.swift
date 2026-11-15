@@ -21,7 +21,7 @@ struct GameSettingsView: View {
                     Label("La calibration est conservée localement entre les parties.", systemImage: "scope")
                 }
                 .font(AFSRFont.caption())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.afsrTextSoft)
             } header: {
                 Text("Confidentialité")
             }
@@ -30,23 +30,25 @@ struct GameSettingsView: View {
                 HStack {
                     Text("Version")
                     Spacer()
-                    Text(appVersion).foregroundStyle(.secondary).monospacedDigit()
+                    Text(appVersion).foregroundStyle(.afsrTextSoft).monospacedDigit()
                 }
                 Link(destination: URL(string: "https://afsr.fr")!) {
                     Label("Site officiel AFSR", systemImage: "safari")
                 }
                 Link(destination: URL(string: "https://afsr.fr/nous-soutenir/faire-un-don")!) {
                     Label("Soutenir l'AFSR", systemImage: "heart.fill")
-                        .foregroundStyle(.afsrEmergency)
+                        .foregroundStyle(.afsrPrimaryAdaptive)
                 }
             }
 
             Section {
                 Text("RettGame est un compagnon de l'application principale RettApp, dédié exclusivement au jeu de communication par le regard. Conçu par et pour les familles concernées par le syndrome de Rett.")
                     .font(AFSRFont.caption())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.afsrTextSoft)
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(Color.afsrBackground)
         .navigationTitle("Réglages")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Vue racine de RettGame : menu de lancement listant les expériences de jeu
 /// natives (déclinaisons des jeux GazePlay). Lien vers les réglages dans la
-/// barre d'outils.
+/// barre d'outils. Graphisme conforme à la charte AFSR (voir AFSRTheme).
 struct GameRootView: View {
     @State private var showSettings = false
 
@@ -35,6 +35,9 @@ struct GameRootView: View {
                     }
                     .buttonStyle(.plain)
                 }
+                // Largeur de lecture limitée : sur iPad les cartes ne s'étirent pas sur tout l'écran.
+                .frame(maxWidth: 640)
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal)
                 .padding(.bottom, 24)
             }
@@ -60,14 +63,15 @@ struct GameRootView: View {
 
 private struct Header: View {
     var body: some View {
-        VStack(spacing: 8) {
-            Image("RettLogo")
+        VStack(spacing: 16) {
+            Image("AFSRLogo")
                 .resizable()
                 .scaledToFit()
-                .frame(height: 100)
+                .frame(maxWidth: 260)
+                .accessibilityLabel("Association Française du Syndrome de Rett")
             Text("Choisissez une activité")
-                .font(AFSRFont.headline())
-                .foregroundStyle(.secondary)
+                .font(AFSRFont.headline(17))
+                .foregroundStyle(.afsrText)
         }
     }
 }
@@ -80,21 +84,22 @@ private struct GameCard: View {
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             ZStack {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color.afsrPurple.opacity(0.15))
+                RoundedRectangle(cornerRadius: AFSRTokens.cornerRadiusSmall + 6, style: .continuous)
+                    .fill(Color.afsrPrimarySoft)
                     .frame(width: 64, height: 64)
                 Image(systemName: iconSystemName)
                     .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(Color.afsrPurpleAdaptive)
+                    .foregroundStyle(Color.afsrPrimary)
             }
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(AFSRFont.headline(20))
-                    .foregroundStyle(.primary)
+                    .font(AFSRFont.headline(17))
+                    .foregroundStyle(.afsrText)
+                    .multilineTextAlignment(.leading)
                 Text(subtitle)
                     .font(AFSRFont.body(15))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.afsrTextSoft)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -103,18 +108,9 @@ private struct GameCard: View {
 
             Image(systemName: "chevron.right")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.afsrPrimaryAdaptive)
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: AFSRTokens.cornerRadius, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AFSRTokens.cornerRadius, style: .continuous)
-                .stroke(Color.afsrPurple.opacity(0.08), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.06), radius: 6, x: 0, y: 2)
+        .afsrCard()
     }
 }
 

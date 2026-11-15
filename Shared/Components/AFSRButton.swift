@@ -1,11 +1,38 @@
 import SwiftUI
 
+// MARK: - Style de bouton plein (charte AFSR)
+//
+// Bouton principal : fond magenta-100, bordure magenta-90, texte blanc, rayon 20, appui en
+// magenta-110, ombre `md`. Le fond plein reste le même en mode sombre : blanc sur magenta-100
+// atteint un contraste de 7,2.
+
+struct AFSRFilledButtonStyle: ButtonStyle {
+    let fill: Color
+    let pressedFill: Color
+    let border: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: AFSRTokens.minTapTarget)
+            .background(
+                configuration.isPressed ? pressedFill : fill,
+                in: RoundedRectangle(cornerRadius: AFSRTokens.cornerRadius, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: AFSRTokens.cornerRadius, style: .continuous)
+                    .stroke(border, lineWidth: 1)
+            )
+            .shadow(color: Color.afsrTertiary.opacity(0.20), radius: 2, x: 0, y: 1)
+    }
+}
+
 // MARK: - Primary button
 
 struct AFSRPrimaryButton: View {
     let title: String
     var icon: String? = nil
-    var color: Color = .afsrPurpleAdaptive
     let action: () -> Void
 
     var body: some View {
@@ -13,18 +40,20 @@ struct AFSRPrimaryButton: View {
             HStack {
                 if let icon { Image(systemName: icon) }
                 Text(title)
-                    .font(AFSRFont.headline(18))
+                    .font(AFSRFont.button(18))
             }
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: AFSRTokens.minTapTarget)
-            .foregroundStyle(.white)
-            .background(color, in: RoundedRectangle(cornerRadius: AFSRTokens.cornerRadius, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(AFSRFilledButtonStyle(
+            fill: .afsrPrimary,
+            pressedFill: .afsrPrimaryHover,
+            border: .afsrPrimaryBorder
+        ))
     }
 }
 
 // MARK: - Secondary / outline button
+//
+// Bouton secondaire : fond blanc, bordure magenta-30, texte magenta.
 
 struct AFSRSecondaryButton: View {
     let title: String
@@ -36,15 +65,20 @@ struct AFSRSecondaryButton: View {
             HStack {
                 if let icon { Image(systemName: icon) }
                 Text(title)
-                    .font(AFSRFont.headline(17))
+                    .font(AFSRFont.button(17))
             }
             .frame(maxWidth: .infinity)
             .frame(minHeight: AFSRTokens.minTapTarget)
-            .foregroundStyle(.afsrPurpleAdaptive)
+            .foregroundStyle(.afsrPrimaryAdaptive)
+            .background(
+                Color.afsrSurface,
+                in: RoundedRectangle(cornerRadius: AFSRTokens.cornerRadius, style: .continuous)
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: AFSRTokens.cornerRadius, style: .continuous)
-                    .stroke(Color.afsrPurpleAdaptive, lineWidth: 2)
+                    .stroke(Color.afsrBorder, lineWidth: 1.5)
             )
+            .shadow(color: Color.afsrTertiary.opacity(0.20), radius: 2, x: 0, y: 1)
         }
         .buttonStyle(.plain)
     }
@@ -66,7 +100,7 @@ struct AFSREmergencyButton: View {
                         .font(.system(size: 44, weight: .bold))
                 }
                 Text(title)
-                    .font(AFSRFont.headline(22))
+                    .font(AFSRFont.button(22))
                     .multilineTextAlignment(.center)
             }
             .foregroundStyle(.white)
@@ -87,4 +121,5 @@ struct AFSREmergencyButton: View {
         AFSRSecondaryButton(title: "Annuler") {}
     }
     .padding()
+    .background(Color.afsrBackground)
 }
