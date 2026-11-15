@@ -18,8 +18,8 @@
                             <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" image="AFSRLogoLaunch" translatesAutoresizingMaskIntoConstraints="NO" id="IMG-01-aaa">
                                 <rect key="frame" x="56.5" y="323" width="280" height="78"/>
                                 <constraints>
-                                    <constraint firstAttribute="width" constant="280" id="IMG-W"/>
-                                    <constraint firstAttribute="height" constant="78" id="IMG-H"/>
+                                    <constraint firstAttribute="width" relation="lessThanOrEqual" constant="440" id="IMG-W"/>
+                                    <constraint firstAttribute="width" secondItem="IMG-01-aaa" secondAttribute="height" multiplier="680:190" id="IMG-H"/>
                                 </constraints>
                             </imageView>
                             <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="RettGame" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="LBL-01-aaa">
@@ -38,6 +38,7 @@
                         <color key="backgroundColor" red="0.984" green="0.965" blue="0.980" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
                             <constraint firstItem="IMG-01-aaa" firstAttribute="centerX" secondItem="VW-01-aaa" secondAttribute="centerX" id="C-01"/>
+                            <constraint firstItem="IMG-01-aaa" firstAttribute="width" secondItem="VW-01-aaa" secondAttribute="width" multiplier="0.72" priority="750" id="C-09"/>
                             <constraint firstItem="IMG-01-aaa" firstAttribute="centerY" secondItem="VW-01-aaa" secondAttribute="centerY" multiplier="0.85" id="C-02"/>
                             <constraint firstItem="LBL-01-aaa" firstAttribute="top" secondItem="IMG-01-aaa" secondAttribute="bottom" constant="28" id="C-03"/>
                             <constraint firstItem="LBL-01-aaa" firstAttribute="centerX" secondItem="VW-01-aaa" secondAttribute="centerX" id="C-04"/>
